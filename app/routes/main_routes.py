@@ -40,8 +40,7 @@ async def index(request: Request):
     if user:
         user_stats = get_user_stats(user.id)
     
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "categories": categories,
         "stats": stats,
         "user": user,
@@ -64,8 +63,7 @@ async def category_page(request: Request, slug: str):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("topic.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "topic.html", {
         "category": category,
         "topics": topics,
         "quizzes": quizzes,
@@ -85,8 +83,7 @@ async def theory_page(request: Request, topic_id: int):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("theory.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "theory.html", {
         "topic": topic,
         "user": user,
         "csrf_token": generate_csrf_token()
@@ -105,8 +102,7 @@ async def quiz_page(request: Request, quiz_id: int):
     questions = get_questions_by_quiz(quiz_id)
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("quiz.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "quiz.html", {
         "quiz": quiz,
         "questions": questions,
         "user": user,
@@ -171,8 +167,7 @@ async def glossary_page(request: Request, q: str = ""):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("glossary.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "glossary.html", {
         "terms": terms,
         "query": q,
         "user": user,
@@ -208,8 +203,7 @@ async def feedback_form(request: Request):
             for r in rows
         ]
     
-    return templates.TemplateResponse("feedback.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "feedback.html", {
         "user": user,
         "csrf_token": generate_csrf_token(),
         "avg_rating": avg_rating,
@@ -241,8 +235,7 @@ async def about_page(request: Request):
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("about.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "about.html", {
         "user": user,
         "csrf_token": generate_csrf_token()
     })
@@ -254,8 +247,7 @@ async def database_page(request: Request):
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("database.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "database.html", {
         "user": user,
         "csrf_token": generate_csrf_token()
     })
@@ -272,8 +264,7 @@ async def stats_page(request: Request):
     
     user_stats = get_user_stats(user.id)
     
-    return templates.TemplateResponse("stats.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "stats.html", {
         "user": user,
         "user_stats": user_stats,
         "csrf_token": generate_csrf_token()

@@ -35,8 +35,7 @@ async def login_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/", status_code=303)
     
-    return templates.TemplateResponse("login.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "login.html", {
         "csrf_token": generate_csrf_token(),
         "error": None
     })
@@ -52,8 +51,7 @@ async def login_submit(request: Request):
     password = form.get("password", "")
     
     if not username or not password:
-        return templates.TemplateResponse("login.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "login.html", {
             "csrf_token": generate_csrf_token(),
             "error": "Введите имя пользователя и пароль"
         })
@@ -61,15 +59,13 @@ async def login_submit(request: Request):
     user = get_user_by_username(username)
     
     if not user:
-        return templates.TemplateResponse("login.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "login.html", {
             "csrf_token": generate_csrf_token(),
             "error": "Неверное имя пользователя или пароль"
         })
     
     if not verify_password(password, user.password_hash):
-        return templates.TemplateResponse("login.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "login.html", {
             "csrf_token": generate_csrf_token(),
             "error": "Неверное имя пользователя или пароль"
         })
@@ -90,8 +86,7 @@ async def register_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/", status_code=303)
     
-    return templates.TemplateResponse("register.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "register.html", {
         "csrf_token": generate_csrf_token(),
         "errors": {},
         "form_data": {}
@@ -126,8 +121,7 @@ async def register_submit(request: Request):
         errors["confirm_password"] = "Пароли не совпадают"
     
     if errors:
-        return templates.TemplateResponse("register.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "register.html", {
             "csrf_token": generate_csrf_token(),
             "errors": errors,
             "form_data": {"username": username, "email": email}
@@ -137,8 +131,7 @@ async def register_submit(request: Request):
     success, message = create_user(username, email, password)
     
     if not success:
-        return templates.TemplateResponse("register.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "register.html", {
             "csrf_token": generate_csrf_token(),
             "errors": {"general": message},
             "form_data": {"username": username, "email": email}
@@ -174,8 +167,7 @@ async def profile_page(request: Request):
     user_stats = get_user_stats(user.id)
     achievements = get_user_achievements(user.id)
     
-    return templates.TemplateResponse("profile.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "profile.html", {
         "user": user,
         "user_stats": user_stats,
         "achievements": achievements,

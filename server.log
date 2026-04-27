@@ -4,3 +4,8 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 INFO:     127.0.0.1:58104 - "GET /feedback HTTP/1.1" 200 OK
 INFO:     127.0.0.1:58106 - "GET /theory HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58112 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58114 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58116 - "GET /register HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58118 - "GET /glossary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58120 - "GET /feedback HTTP/1.1" 200 OK
