@@ -29,8 +29,7 @@ async def admin_dashboard(request: Request, admin: bool = Depends(get_current_ad
     quizzes = get_all_quizzes()
     feedbacks = get_all_feedback()
     
-    return templates.TemplateResponse("admin/dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/dashboard.html", {
         "categories": categories,
         "quizzes": quizzes,
         "feedbacks": feedbacks,
@@ -48,8 +47,7 @@ async def admin_login_page(request: Request):
     if verify_admin_session(request):
         return RedirectResponse(url="/admin", status_code=303)
     
-    return templates.TemplateResponse("admin/login.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "admin/login.html", {
         "error": None,
         "csrf_token": generate_csrf_token()
     })
@@ -68,8 +66,7 @@ async def admin_login_submit(request: Request):
     admin_username = os.getenv("ADMIN_USERNAME", "admin")
     
     if username != admin_username:
-        return templates.TemplateResponse("admin/login.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "admin/login.html", {
             "error": "Неверное имя пользователя или пароль",
             "csrf_token": generate_csrf_token()
         })
@@ -78,8 +75,7 @@ async def admin_login_submit(request: Request):
     expected_password = os.getenv("ADMIN_PASSWORD", "admin")
     
     if password != expected_password:
-        return templates.TemplateResponse("admin/login.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "admin/login.html", {
             "error": "Неверное имя пользователя или пароль",
             "csrf_token": generate_csrf_token()
         })

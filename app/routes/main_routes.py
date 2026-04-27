@@ -13,6 +13,7 @@ from app.services.data_service import (
     create_feedback, get_user_stats, add_xp, check_achievements,
     get_platform_stats
 )
+from app.database.db import get_db, DB_NAME
 from app.deps.auth import generate_csrf_token, sanitize_input, validate_password
 from app.services.user_service import get_current_user_from_session
 
@@ -39,8 +40,7 @@ async def index(request: Request):
     if user:
         user_stats = get_user_stats(user.id)
     
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "categories": categories,
         "stats": stats,
         "user": user,
@@ -63,8 +63,7 @@ async def category_page(request: Request, slug: str):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("topic.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "topic.html", {
         "category": category,
         "topics": topics,
         "quizzes": quizzes,
@@ -84,8 +83,7 @@ async def theory_page(request: Request, topic_id: int):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("theory.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "theory.html", {
         "topic": topic,
         "user": user,
         "csrf_token": generate_csrf_token()
@@ -104,8 +102,7 @@ async def quiz_page(request: Request, quiz_id: int):
     questions = get_questions_by_quiz(quiz_id)
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("quiz.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "quiz.html", {
         "quiz": quiz,
         "questions": questions,
         "user": user,
@@ -170,8 +167,7 @@ async def glossary_page(request: Request, q: str = ""):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("glossary.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "glossary.html", {
         "terms": terms,
         "query": q,
         "user": user,
@@ -185,10 +181,34 @@ async def feedback_form(request: Request):
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("feedback.html", {
-        "request": request,
+    # Получаем статистику отзывов
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT AVG(rating) FROM feedback WHERE rating > 0")
+        avg_result = cursor.fetchone()[0]
+        avg_rating = round(avg_result, 2) if avg_result else 0
+        
+        cursor.execute("SELECT COUNT(*) FROM feedback")
+        total_feedback = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT id, name, email, message, rating, created_at 
+            FROM feedback 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        """)
+        rows = cursor.fetchall()
+        recent_feedback = [
+            {"id": r[0], "name": r[1], "email": r[2], "message": r[3], "rating": r[4], "created_at": r[5]}
+            for r in rows
+        ]
+    
+    return templates.TemplateResponse(request, "feedback.html", {
         "user": user,
-        "csrf_token": generate_csrf_token()
+        "csrf_token": generate_csrf_token(),
+        "avg_rating": avg_rating,
+        "total_feedback": total_feedback,
+        "recent_feedback": recent_feedback
     })
 
 
@@ -215,8 +235,7 @@ async def about_page(request: Request):
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("about.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "about.html", {
         "user": user,
         "csrf_token": generate_csrf_token()
     })
@@ -228,8 +247,7 @@ async def database_page(request: Request):
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse("database.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "database.html", {
         "user": user,
         "csrf_token": generate_csrf_token()
     })
@@ -246,9 +264,110 @@ async def stats_page(request: Request):
     
     user_stats = get_user_stats(user.id)
     
-    return templates.TemplateResponse("stats.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "stats.html", {
         "user": user,
         "user_stats": user_stats,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request):
+    """Страница профиля пользователя."""
+    templates = request.app.state.templates
+    user = get_current_user_from_session(request)
+    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    user_stats = get_user_stats(user.id)
+    
+    return templates.TemplateResponse(request, "profile.html", {
+        "user": user,
+        "user_stats": user_stats,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/theory", response_class=HTMLResponse)
+async def theory_list_page(request: Request):
+    """Страница списка всех тем теории."""
+    templates = request.app.state.templates
+    categories = get_all_categories()
+    user = get_current_user_from_session(request)
+    
+    # Собираем все темы из всех категорий
+    all_topics = []
+    for category in categories:
+        topics = get_topics_by_category(category.id)
+        for topic in topics:
+            all_topics.append({
+                'id': topic.id,
+                'title': topic.title,
+                'content': topic.content if hasattr(topic, 'content') else '',
+                'category_name': category.name,
+                'category_slug': category.slug,
+                'created_at': topic.created_at if hasattr(topic, 'created_at') else None
+            })
+    
+    return templates.TemplateResponse(request, "theory_list.html", {
+        "topics": all_topics,
+        "categories": categories,
+        "user": user,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/quiz", response_class=HTMLResponse)
+async def quiz_list_page(request: Request):
+    """Страница списка всех тестов."""
+    templates = request.app.state.templates
+    quizzes = get_all_quizzes()
+    user = get_current_user_from_session(request)
+    
+    return templates.TemplateResponse(request, "quiz_list.html", {
+        "quizzes": quizzes,
+        "user": user,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/bookmarks", response_class=HTMLResponse)
+async def bookmarks_page(request: Request):
+    """Страница закладок пользователя."""
+    templates = request.app.state.templates
+    user = get_current_user_from_session(request)
+    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    # Получаем закладки пользователя из БД
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT b.id, b.topic_id, b.quiz_id, b.created_at,
+                   t.title as topic_title, q.title as quiz_title
+            FROM bookmarks b
+            LEFT JOIN topics t ON b.topic_id = t.id
+            LEFT JOIN quizzes q ON b.quiz_id = q.id
+            WHERE b.user_id = ?
+            ORDER BY b.created_at DESC
+        """, (user.id,))
+        rows = cursor.fetchall()
+        bookmarks = [
+            {
+                "id": r[0],
+                "topic_id": r[1],
+                "quiz_id": r[2],
+                "created_at": r[3],
+                "topic_title": r[4],
+                "quiz_title": r[5]
+            }
+            for r in rows
+        ]
+    
+    return templates.TemplateResponse(request, "bookmarks.html", {
+        "bookmarks": bookmarks,
+        "user": user,
         "csrf_token": generate_csrf_token()
     })

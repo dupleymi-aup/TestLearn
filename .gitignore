@@ -1,11 +1,15 @@
 ```
+# Compiled Python files
+*.pyc
+__pycache__/
+
+# Logs
+*.log
+server.log
+
 # Database
 *.db
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
+testlearn.db
 
 # Environment
 .env
@@ -16,25 +20,22 @@
 .vscode/
 .idea/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
+# Dependencies
 .venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
+venv/
+node_modules/
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Coverage
 .coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.DS_Store
-Thumbs.db
+coverage/
+htmlcov/
+
+# Cache
+.mypy_cache/
+.pytest_cache/
 ```

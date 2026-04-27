@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Теория — TestLearn{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 py-12">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Заголовок -->
+        <div class="text-center mb-12">
+            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 mb-4">
+                Теория тестирования
+            </h1>
+            <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                Изучайте основы тестирования ПО по структурированным темам
+            </p>
+        </div>
+
+        <!-- Список тем -->
+        {% if topics %}
+        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {% for topic in topics %}
+            <a href="/theory/{{ topic.id }}" 
+               class="card-hover bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-emerald-100 group">
+                <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-2"></div>
+                <div class="p-6">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+                            {{ topic.category_name }}
+                        </span>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-2 group-hover:text-emerald-600 transition-colors">
+                        {{ topic.title }}
+                    </h3>
+                    <p class="text-gray-600 text-sm line-clamp-3 mb-4">
+                        {{ topic.content[:150] }}{% if topic.content|length > 150 %}...{% endif %}
+                    </p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-500">
+                            {% if topic.created_at %}
+                            Создано: {{ topic.created_at[:10] }}
+                            {% endif %}
+                        </span>
+                        <span class="text-emerald-600 font-semibold text-sm group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                            Читать →
+                        </span>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-16">
+            <div class="text-6xl mb-4">📚</div>
+            <h3 class="text-2xl font-bold text-gray-700 mb-2">Темы не найдены</h3>
+            <p class="text-gray-500">В данный момент нет доступных материалов</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
