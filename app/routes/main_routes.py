@@ -63,7 +63,7 @@ async def category_page(request: Request, slug: str):
     
     user = get_current_user_from_session(request)
     
-    return templates.TemplateResponse(request, "topic.html", {
+    return templates.TemplateResponse(request, "category.html", {
         "category": category,
         "topics": topics,
         "quizzes": quizzes,
@@ -83,10 +83,16 @@ async def theory_page(request: Request, topic_id: int):
     
     user = get_current_user_from_session(request)
     
+    # Получаем статистику для прогресс-бара
+    total_topics = len(get_topics_by_category(topic.category_id))
+    topics_read = 1  # Можно хранить в сессии или БД
+    
     return templates.TemplateResponse(request, "theory.html", {
         "topic": topic,
         "user": user,
-        "csrf_token": generate_csrf_token()
+        "csrf_token": generate_csrf_token(),
+        "total_topics": total_topics,
+        "topics_read": topics_read
     })
 
 
