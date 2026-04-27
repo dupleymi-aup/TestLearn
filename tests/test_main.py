@@ -6,7 +6,11 @@ from fastapi.testclient import TestClient
 # Add the parent directory to sys.path so we can import main
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
 
-from main import app
+from main import app, init_db, seed_data
+
+# Initialize the database before running tests
+init_db()
+seed_data()
 
 client = TestClient(app)
 
