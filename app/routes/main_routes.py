@@ -13,6 +13,7 @@ from app.services.data_service import (
     create_feedback, get_user_stats, add_xp, check_achievements,
     get_platform_stats
 )
+from app.database.db import get_db, DB_NAME
 from app.deps.auth import generate_csrf_token, sanitize_input, validate_password
 from app.services.user_service import get_current_user_from_session
 
@@ -185,10 +186,35 @@ async def feedback_form(request: Request):
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
     
+    # Получаем статистику отзывов
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT AVG(rating) FROM feedback WHERE rating > 0")
+        avg_result = cursor.fetchone()[0]
+        avg_rating = round(avg_result, 2) if avg_result else 0
+        
+        cursor.execute("SELECT COUNT(*) FROM feedback")
+        total_feedback = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT id, name, email, message, rating, created_at 
+            FROM feedback 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        """)
+        rows = cursor.fetchall()
+        recent_feedback = [
+            {"id": r[0], "name": r[1], "email": r[2], "message": r[3], "rating": r[4], "created_at": r[5]}
+            for r in rows
+        ]
+    
     return templates.TemplateResponse("feedback.html", {
         "request": request,
         "user": user,
-        "csrf_token": generate_csrf_token()
+        "csrf_token": generate_csrf_token(),
+        "avg_rating": avg_rating,
+        "total_feedback": total_feedback,
+        "recent_feedback": recent_feedback
     })
 
 
