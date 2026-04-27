@@ -269,3 +269,105 @@ async def stats_page(request: Request):
         "user_stats": user_stats,
         "csrf_token": generate_csrf_token()
     })
+
+
+@router.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request):
+    """Страница профиля пользователя."""
+    templates = request.app.state.templates
+    user = get_current_user_from_session(request)
+    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    user_stats = get_user_stats(user.id)
+    
+    return templates.TemplateResponse(request, "profile.html", {
+        "user": user,
+        "user_stats": user_stats,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/theory", response_class=HTMLResponse)
+async def theory_list_page(request: Request):
+    """Страница списка всех тем теории."""
+    templates = request.app.state.templates
+    categories = get_all_categories()
+    user = get_current_user_from_session(request)
+    
+    # Собираем все темы из всех категорий
+    all_topics = []
+    for category in categories:
+        topics = get_topics_by_category(category.id)
+        for topic in topics:
+            all_topics.append({
+                'id': topic.id,
+                'title': topic.title,
+                'content': topic.content if hasattr(topic, 'content') else '',
+                'category_name': category.name,
+                'category_slug': category.slug,
+                'created_at': topic.created_at if hasattr(topic, 'created_at') else None
+            })
+    
+    return templates.TemplateResponse(request, "theory_list.html", {
+        "topics": all_topics,
+        "categories": categories,
+        "user": user,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/quiz", response_class=HTMLResponse)
+async def quiz_list_page(request: Request):
+    """Страница списка всех тестов."""
+    templates = request.app.state.templates
+    quizzes = get_all_quizzes()
+    user = get_current_user_from_session(request)
+    
+    return templates.TemplateResponse(request, "quiz_list.html", {
+        "quizzes": quizzes,
+        "user": user,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/bookmarks", response_class=HTMLResponse)
+async def bookmarks_page(request: Request):
+    """Страница закладок пользователя."""
+    templates = request.app.state.templates
+    user = get_current_user_from_session(request)
+    
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    # Получаем закладки пользователя из БД
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT b.id, b.topic_id, b.quiz_id, b.created_at,
+                   t.title as topic_title, q.title as quiz_title
+            FROM bookmarks b
+            LEFT JOIN topics t ON b.topic_id = t.id
+            LEFT JOIN quizzes q ON b.quiz_id = q.id
+            WHERE b.user_id = ?
+            ORDER BY b.created_at DESC
+        """, (user.id,))
+        rows = cursor.fetchall()
+        bookmarks = [
+            {
+                "id": r[0],
+                "topic_id": r[1],
+                "quiz_id": r[2],
+                "created_at": r[3],
+                "topic_title": r[4],
+                "quiz_title": r[5]
+            }
+            for r in rows
+        ]
+    
+    return templates.TemplateResponse(request, "bookmarks.html", {
+        "bookmarks": bookmarks,
+        "user": user,
+        "csrf_token": generate_csrf_token()
+    })
