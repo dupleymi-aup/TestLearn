@@ -180,10 +180,15 @@ document.addEventListener('DOMContentLoaded', updateThemeIcon);
                 <a href="/about" class="nav-link font-medium text-sm {% if active_page == 'about' %}text-emerald-700{% else %}text-gray-600 hover:text-emerald-700{% endif %}" {% if active_page == 'about' %}style="color: #047857;"{% endif %}>О проекте</a>
                 <a href="/feedback" class="nav-link font-medium text-sm {% if active_page == 'feedback' %}text-emerald-700{% else %}text-gray-600 hover:text-emerald-700{% endif %}" {% if active_page == 'feedback' %}style="color: #047857;"{% endif %}>Обратная связь</a>
                 {% set session_id = request.cookies.get('admin_session') %}
-                {% if session_id %}
+                {% set user_id = request.session.get('user_id') %}
+                {% if user_id %}
+                    <a href="/profile" class="nav-link font-medium text-sm text-gray-600 hover:text-emerald-700">Профиль</a>
+                    <a href="/logout" class="nav-link font-medium text-sm text-gray-600 hover:text-emerald-700">Выйти</a>
+                {% elif session_id %}
                     <a href="/logout" class="nav-link font-medium text-sm text-gray-600 hover:text-emerald-700">Выйти</a>
                 {% else %}
                     <a href="/login" class="nav-link font-medium text-sm text-gray-600 hover:text-emerald-700">Войти</a>
+                    <a href="/register" class="nav-link font-medium text-sm bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700">Регистрация</a>
                 {% endif %}
             </div>
             <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')" class="lg:hidden p-2 rounded-lg hover:bg-gray-100" style="background-color: transparent;" aria-label="Меню">
@@ -258,6 +263,9 @@ document.addEventListener('DOMContentLoaded', updateThemeIcon);
 </footer>
 
 {% block extra_js %}{% endblock %}
+
+<!-- Main JavaScript -->
+<script src="/static/js/main.js"></script>
 
 </body>
 </html>
