@@ -121,30 +121,32 @@ async def quiz_submit(request: Request, quiz_id: int):
     """Отправка результатов теста."""
     form = await request.form()
     quiz = get_quiz_by_id(quiz_id)
-    
+
     if not quiz:
         raise HTTPException(status_code=404, detail="Тест не найден")
-    
+
     questions = get_questions_by_quiz(quiz_id)
     score = 0
     total = len(questions)
-    
+
+    # Store user answers in session for later retrieval in results page
     for question in questions:
         user_answer = form.get(f"question_{question.id}")
+        request.session[f"quiz_{quiz_id}_question_{question.id}"] = user_answer
         if user_answer == question.correct_option:
             score += 1
-    
+
     user = get_current_user_from_session(request)
     user_id = user.id if user else None
-    
+
     result_id = save_quiz_result(quiz_id, score, total, user_id)
-    
+
     # Добавляем XP если пользователь авторизован
     if user:
         xp_gained = score * 10
         add_xp(user.id, xp_gained)
         check_achievements(user.id)
-    
+
     return RedirectResponse(
         url=f"/quiz/{quiz_id}/result/{result_id}",
         status_code=303
@@ -156,9 +158,55 @@ async def quiz_result(request: Request, quiz_id: int, result_id: str):
     """Страница результатов теста."""
     templates = request.app.state.templates
     
-    # Здесь нужна логика получения результата по ID
-    # Для простоты перенаправляем на страницу теста
-    return RedirectResponse(url=f"/quiz/{quiz_id}", status_code=303)
+    # Получаем результат теста по ID
+    result = get_quiz_result_by_id(result_id)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Результат теста не найден")
+    
+    # Проверяем, что результат относится к данному тесту
+    if result.quiz_id != quiz_id:
+        raise HTTPException(status_code=400, detail="Результат не относится к данному тесту")
+    
+    quiz = get_quiz_by_id(quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Тест не найден")
+    
+    questions = get_questions_by_quiz(quiz_id)
+    
+    # Подготавливаем детальные результаты для отображения
+    detailed_results = []
+    for question in questions:
+        user_answer = request.session.get(f"quiz_{quiz_id}_question_{question.id}", "")
+        is_correct = user_answer == question.correct_option
+        
+        detailed_results.append({
+            "question": question.question_text,
+            "option_a": question.option_a,
+            "option_b": question.option_b,
+            "option_c": question.option_c,
+            "option_d": question.option_d,
+            "correct_answer": question.correct_option,
+            "your_answer": user_answer,
+            "is_correct": is_correct,
+            "explanation": question.explanation
+        })
+    
+    # Вычисляем процент
+    percentage = int((result.score / result.total) * 100) if result.total > 0 else 0
+    
+    user = get_current_user_from_session(request)
+    
+    return templates.TemplateResponse(request, "quiz_result.html", {
+        "quiz": quiz,
+        "result": result,
+        "results": detailed_results,
+        "score": result.score,
+        "total": result.total,
+        "percentage": percentage,
+        "user": user,
+        "csrf_token": generate_csrf_token()
+    })
 
 
 @router.get("/glossary", response_class=HTMLResponse)

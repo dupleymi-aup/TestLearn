@@ -175,7 +175,7 @@ def save_quiz_result(quiz_id: int, score: int, total: int, user_id: Optional[int
     """Сохранить результат теста."""
     result_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
-    
+
     with get_db() as conn:
         conn.execute(
             "INSERT INTO quiz_results (id, quiz_id, score, total, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -183,6 +183,17 @@ def save_quiz_result(quiz_id: int, score: int, total: int, user_id: Optional[int
         )
         conn.commit()
     return result_id
+
+
+def get_quiz_result_by_id(result_id: str) -> Optional[QuizResult]:
+    """Получить результат теста по ID."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM quiz_results WHERE id = ?",
+            (result_id,)
+        )
+        row = cursor.fetchone()
+        return QuizResult(**dict(row)) if row else None
 
 
 def get_quiz_results(quiz_id: int) -> List[QuizResult]:
