@@ -80,73 +80,125 @@
                     {% endif %}
                     <div class="flex-1">
                         <p class="font-medium text-gray-900 mb-3">{{ r.question }}</p>
+                        {% if r.question_type == "multiple_choice" %}
+                        <p class="text-xs text-blue-600 mb-2">(Выбрано несколько вариантов)</p>
+                        {% endif %}
 
-                        <!-- Варианты ответов -->
+                        <!-- Варианты ответов для single_choice и multiple_choice -->
+                        {% if r.question_type in ["single_choice", "multiple_choice"] %}
                         <div class="grid gap-2">
                             <!-- Option A -->
                             <div class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm
-                                {% if r.correct_answer == 'A' and r.your_answer != 'A' %}border border-green-300{% endif %}
-                                {% if r.correct_answer == 'A' and r.is_correct %}border border-green-300{% endif %}
-                                {% if r.your_answer == 'A' and not r.is_correct %}border border-red-300{% endif %}"
-                                style="{% if r.correct_answer == 'A' %}background-color: #d1fae5;{% elif r.your_answer == 'A' and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
+                                {% if 'A' in r.correct_answer and r.your_answer != r.correct_answer %}border border-green-300{% endif %}
+                                {% if r.is_correct %}border border-green-300{% endif %}
+                                {% if not r.is_correct and r.your_answer and 'A' in r.your_answer %}border border-red-300{% endif %}"
+                                style="{% if 'A' in r.correct_answer %}background-color: #d1fae5;{% elif r.your_answer and 'A' in r.your_answer and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
                                 <span class="font-bold text-gray-500 w-6">A.</span>
-                                <span class="flex-1 {% if r.correct_answer == 'A' %}font-semibold text-green-800{% elif r.your_answer == 'A' and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_a }}</span>
-                                {% if r.correct_answer == 'A' %}
+                                <span class="flex-1 {% if 'A' in r.correct_answer %}font-semibold text-green-800{% elif r.your_answer and 'A' in r.your_answer and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_a }}</span>
+                                {% if 'A' in r.correct_answer %}
                                 <svg class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 {% endif %}
-                                {% if r.your_answer == 'A' and not r.is_correct %}
+                                {% if r.your_answer and 'A' in r.your_answer and not r.is_correct %}
                                 <svg class="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 {% endif %}
                             </div>
 
                             <!-- Option B -->
                             <div class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm
-                                {% if r.correct_answer == 'B' and r.your_answer != 'B' %}border border-green-300{% endif %}
-                                {% if r.correct_answer == 'B' and r.is_correct %}border border-green-300{% endif %}
-                                {% if r.your_answer == 'B' and not r.is_correct %}border border-red-300{% endif %}"
-                                style="{% if r.correct_answer == 'B' %}background-color: #d1fae5;{% elif r.your_answer == 'B' and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
+                                {% if 'B' in r.correct_answer and r.your_answer != r.correct_answer %}border border-green-300{% endif %}
+                                {% if r.is_correct %}border border-green-300{% endif %}
+                                {% if not r.is_correct and r.your_answer and 'B' in r.your_answer %}border border-red-300{% endif %}"
+                                style="{% if 'B' in r.correct_answer %}background-color: #d1fae5;{% elif r.your_answer and 'B' in r.your_answer and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
                                 <span class="font-bold text-gray-500 w-6">B.</span>
-                                <span class="flex-1 {% if r.correct_answer == 'B' %}font-semibold text-green-800{% elif r.your_answer == 'B' and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_b }}</span>
-                                {% if r.correct_answer == 'B' %}
+                                <span class="flex-1 {% if 'B' in r.correct_answer %}font-semibold text-green-800{% elif r.your_answer and 'B' in r.your_answer and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_b }}</span>
+                                {% if 'B' in r.correct_answer %}
                                 <svg class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 {% endif %}
-                                {% if r.your_answer == 'B' and not r.is_correct %}
+                                {% if r.your_answer and 'B' in r.your_answer and not r.is_correct %}
                                 <svg class="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 {% endif %}
                             </div>
 
                             <!-- Option C -->
                             <div class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm
-                                {% if r.correct_answer == 'C' and r.your_answer != 'C' %}border border-green-300{% endif %}
-                                {% if r.correct_answer == 'C' and r.is_correct %}border border-green-300{% endif %}
-                                {% if r.your_answer == 'C' and not r.is_correct %}border border-red-300{% endif %}"
-                                style="{% if r.correct_answer == 'C' %}background-color: #d1fae5;{% elif r.your_answer == 'C' and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
+                                {% if 'C' in r.correct_answer and r.your_answer != r.correct_answer %}border border-green-300{% endif %}
+                                {% if r.is_correct %}border border-green-300{% endif %}
+                                {% if not r.is_correct and r.your_answer and 'C' in r.your_answer %}border border-red-300{% endif %}"
+                                style="{% if 'C' in r.correct_answer %}background-color: #d1fae5;{% elif r.your_answer and 'C' in r.your_answer and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
                                 <span class="font-bold text-gray-500 w-6">C.</span>
-                                <span class="flex-1 {% if r.correct_answer == 'C' %}font-semibold text-green-800{% elif r.your_answer == 'C' and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_c }}</span>
-                                {% if r.correct_answer == 'C' %}
+                                <span class="flex-1 {% if 'C' in r.correct_answer %}font-semibold text-green-800{% elif r.your_answer and 'C' in r.your_answer and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_c }}</span>
+                                {% if 'C' in r.correct_answer %}
                                 <svg class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 {% endif %}
-                                {% if r.your_answer == 'C' and not r.is_correct %}
+                                {% if r.your_answer and 'C' in r.your_answer and not r.is_correct %}
                                 <svg class="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 {% endif %}
                             </div>
 
                             <!-- Option D -->
                             <div class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm
-                                {% if r.correct_answer == 'D' and r.your_answer != 'D' %}border border-green-300{% endif %}
-                                {% if r.correct_answer == 'D' and r.is_correct %}border border-green-300{% endif %}
-                                {% if r.your_answer == 'D' and not r.is_correct %}border border-red-300{% endif %}"
-                                style="{% if r.correct_answer == 'D' %}background-color: #d1fae5;{% elif r.your_answer == 'D' and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
+                                {% if 'D' in r.correct_answer and r.your_answer != r.correct_answer %}border border-green-300{% endif %}
+                                {% if r.is_correct %}border border-green-300{% endif %}
+                                {% if not r.is_correct and r.your_answer and 'D' in r.your_answer %}border border-red-300{% endif %}"
+                                style="{% if 'D' in r.correct_answer %}background-color: #d1fae5;{% elif r.your_answer and 'D' in r.your_answer and not r.is_correct %}background-color: #fee2e2;{% else %}background-color: #f9fafb;{% endif %}">
                                 <span class="font-bold text-gray-500 w-6">D.</span>
-                                <span class="flex-1 {% if r.correct_answer == 'D' %}font-semibold text-green-800{% elif r.your_answer == 'D' and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_d }}</span>
-                                {% if r.correct_answer == 'D' %}
+                                <span class="flex-1 {% if 'D' in r.correct_answer %}font-semibold text-green-800{% elif r.your_answer and 'D' in r.your_answer and not r.is_correct %}text-red-700{% else %}text-gray-600{% endif %}">{{ r.option_d }}</span>
+                                {% if 'D' in r.correct_answer %}
                                 <svg class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 {% endif %}
-                                {% if r.your_answer == 'D' and not r.is_correct %}
+                                {% if r.your_answer and 'D' in r.your_answer and not r.is_correct %}
                                 <svg class="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 {% endif %}
                             </div>
                         </div>
+                        
+                        {% elif r.question_type == "matching" %}
+                        <div class="space-y-2">
+                            <p class="text-sm text-gray-600 mb-2">Результаты сопоставления:</p>
+                            {% for match_result in r.matching_results %}
+                            <div class="flex items-center gap-3 p-3 rounded-lg {% if match_result.is_correct %}bg-green-50{% else %}bg-red-50{% endif %}">
+                                <div class="flex-1">
+                                    <span class="text-sm font-medium text-gray-700">{{ match_result.left }}</span>
+                                    <span class="mx-2 text-gray-400">→</span>
+                                    <span class="text-sm {% if match_result.is_correct %}text-green-700{% else %}text-red-700 line-through{% endif %}">{{ match_result.user_right or "(не выбрано)" }}</span>
+                                    {% if not match_result.is_correct %}
+                                    <span class="mx-2 text-gray-400">→</span>
+                                    <span class="text-sm font-semibold text-green-700">{{ match_result.correct_right }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if match_result.is_correct %}
+                                <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                {% else %}
+                                <svg class="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        {% elif r.question_type == "ordering" %}
+                        <div class="space-y-2">
+                            <p class="text-sm text-gray-600 mb-2">Правильный порядок:</p>
+                            {% for order_result in r.ordering_results %}
+                            <div class="flex items-center gap-3 p-3 rounded-lg {% if order_result.is_correct %}bg-green-50{% else %}bg-red-50{% endif %}">
+                                <span class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">{{ order_result.position }}</span>
+                                <div class="flex-1">
+                                    {% if order_result.is_correct %}
+                                    <span class="text-sm text-green-700">{{ order_result.item }}</span>
+                                    {% else %}
+                                    <span class="text-sm text-red-700 line-through">{{ order_result.user_item or "(не указано)" }}</span>
+                                    <span class="mx-2 text-gray-400">→</span>
+                                    <span class="text-sm font-semibold text-green-700">{{ order_result.item }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if order_result.is_correct %}
+                                <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                {% else %}
+                                <svg class="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
 
                         {% if r.explanation %}
                         <p class="text-sm text-gray-500 mt-3 italic pl-1">{{ r.explanation }}</p>

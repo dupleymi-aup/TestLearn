@@ -13,36 +13,143 @@
 {% block extra_js %}
 <script>
 var timeLeft = {{ time_limit }};
+var originalTime = {{ time_limit }};
 var timerInterval;
+var autoSaved = false;
+
+// Сохранение прогресса в localStorage
+function saveProgress() {
+    var form = document.getElementById('quiz-form');
+    var answers = {};
+    // Сохраняем radio кнопки (одиночный выбор)
+    form.querySelectorAll('input[type="radio"]:checked').forEach(function(input) {
+        var name = input.name;
+        var value = input.value;
+        answers[name] = value;
+    });
+    // Сохраняем checkbox (множественный выбор) - как массив
+    form.querySelectorAll('input[type="checkbox"]:checked').forEach(function(input) {
+        var name = input.name;
+        var value = input.value;
+        if (!answers[name]) {
+            answers[name] = [];
+        }
+        answers[name].push(value);
+    });
+    localStorage.setItem('quiz_{{ quiz.id }}_answers', JSON.stringify(answers));
+    localStorage.setItem('quiz_{{ quiz.id }}_time', timeLeft);
+}
+
+// Восстановление прогресса из localStorage
+function restoreProgress() {
+    var savedAnswers = localStorage.getItem('quiz_{{ quiz.id }}_answers');
+    var savedTime = localStorage.getItem('quiz_{{ quiz.id }}_time');
+    
+    if (savedAnswers) {
+        var answers = JSON.parse(savedAnswers);
+        for (var name in answers) {
+            var value = answers[name];
+            // Если массив - это множественный выбор (checkbox)
+            if (Array.isArray(value)) {
+                for (var i = 0; i < value.length; i++) {
+                    var input = document.querySelector('input[name="' + name + '"][value="' + value[i] + '"]');
+                    if (input) {
+                        input.checked = true;
+                    }
+                }
+            } else {
+                // Одиночный выбор (radio)
+                var input = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+                if (input) {
+                    input.checked = true;
+                }
+            }
+        }
+        updateProgress();
+        autoSaved = true;
+    }
+    
+    if (savedTime && parseInt(savedTime) < timeLeft) {
+        timeLeft = parseInt(savedTime);
+    }
+}
+
+// Очистка сохранённого прогресса после завершения
+function clearProgress() {
+    localStorage.removeItem('quiz_{{ quiz.id }}_answers');
+    localStorage.removeItem('quiz_{{ quiz.id }}_time');
+}
 
 function updateProgress() {
     var total = {{ questions|length }};
     var form = document.getElementById('quiz-form');
-    var answered = form.querySelectorAll('input[type="radio"]:checked').length;
+    // Считаем и radio, и checkbox как отвеченные вопросы
+    var answeredRadio = form.querySelectorAll('input[type="radio"]:checked').length;
+    var answeredCheckbox = form.querySelectorAll('input[type="checkbox"]:checked').length;
+    
+    // Считаем вопросы на сопоставление (matching) - вопрос считается отвеченным если все select заполнены
+    var matchingQuestions = document.querySelectorAll('[data-question-type="matching"]');
+    var answeredMatching = 0;
+    matchingQuestions.forEach(function(container) {
+        var selects = container.querySelectorAll('select');
+        var allFilled = true;
+        selects.forEach(function(select) {
+            if (!select.value) allFilled = false;
+        });
+        if (allFilled && selects.length > 0) answeredMatching++;
+    });
+    
+    // Считаем вопросы на упорядочивание (ordering) - вопрос считается отвеченным если есть порядок
+    var orderingInputs = form.querySelectorAll('[id^="ordering-answer-"]');
+    var answeredOrdering = 0;
+    orderingInputs.forEach(function(input) {
+        if (input.value) answeredOrdering++;
+    });
+    
+    // Для множественного выбора считаем вопрос отвеченным если выбран хотя бы один вариант
+    var answered = answeredRadio + answeredCheckbox + answeredMatching + answeredOrdering;
     var pct = Math.round((answered / total) * 100);
     document.getElementById('progress-bar').style.width = pct + '%';
     document.getElementById('progress-text').textContent = answered + ' из ' + total;
+    
+    // Автосохранение при изменении ответа
+    saveProgress();
 }
 
 function startTimer() {
+    updateTimerDisplay();
     timerInterval = setInterval(function() {
         timeLeft--;
+        saveProgress(); // Сохраняем время каждую секунду
+        
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
-            document.getElementById('quiz-form').submit();
+            showTimeUpModal();
             return;
         }
-        var mins = Math.floor(timeLeft / 60);
-        var secs = timeLeft % 60;
-        var timerEl = document.getElementById('timer-display');
-        timerEl.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
-
-        if (timeLeft <= 60) {
-            timerEl.className = 'text-lg font-bold timer-danger';
-        } else if (timeLeft <= 180) {
-            timerEl.className = 'text-lg font-bold timer-warning';
-        }
+        updateTimerDisplay();
     }, 1000);
+}
+
+function updateTimerDisplay() {
+    var mins = Math.floor(timeLeft / 60);
+    var secs = timeLeft % 60;
+    var timerEl = document.getElementById('timer-display');
+    timerEl.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    
+    // Визуальные предупреждения
+    var percentageLeft = (timeLeft / originalTime) * 100;
+    if (percentageLeft <= 10) {
+        timerEl.className = 'text-lg font-bold timer-danger';
+        timerEl.parentElement.classList.add('animate-pulse');
+    } else if (percentageLeft <= 20) {
+        timerEl.className = 'text-lg font-bold timer-warning';
+        timerEl.parentElement.classList.remove('animate-pulse');
+    } else {
+        timerEl.className = 'text-lg font-bold';
+        timerEl.parentElement.classList.remove('animate-pulse');
+        timerEl.style.color = '#059669';
+    }
 }
 
 function formatTime(seconds) {
@@ -51,10 +158,134 @@ function formatTime(seconds) {
     return mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
 
+// Модальное окно подтверждения отправки
+function showConfirmModal() {
+    var form = document.getElementById('quiz-form');
+    var total = {{ questions|length }};
+    // Считаем уникальные вопросы с radio и checkbox ответами
+    var answeredRadioQuestions = new Set();
+    form.querySelectorAll('input[type="radio"]:checked').forEach(function(input) {
+        answeredRadioQuestions.add(input.name);
+    });
+    var answeredCheckboxQuestions = new Set();
+    form.querySelectorAll('input[type="checkbox"]:checked').forEach(function(input) {
+        answeredCheckboxQuestions.add(input.name);
+    });
+    var answered = answeredRadioQuestions.size + answeredCheckboxQuestions.size;
+    var unanswered = total - answered;
+    
+    var modal = document.getElementById('confirm-modal');
+    var messageEl = document.getElementById('confirm-message');
+    
+    if (unanswered > 0) {
+        messageEl.innerHTML = 'Вы ответили на <strong>' + answered + '</strong> из <strong>' + total + '</strong> вопросов.<br>Осталось <strong>' + unanswered + '</strong> неотвеченных вопросов.';
+        document.getElementById('unanswered-warning').classList.remove('hidden');
+    } else {
+        messageEl.innerHTML = 'Вы ответили на все вопросы!';
+        document.getElementById('unanswered-warning').classList.add('hidden');
+    }
+    
+    modal.classList.remove('hidden');
+}
+
+function hideConfirmModal() {
+    document.getElementById('confirm-modal').classList.add('hidden');
+}
+
+function submitQuiz() {
+    hideConfirmModal();
+    clearProgress();
+    document.getElementById('quiz-form').submit();
+}
+
+// Модальное окно истечения времени
+function showTimeUpModal() {
+    var modal = document.getElementById('timeup-modal');
+    modal.classList.remove('hidden');
+}
+
+function submitOnTimeUp() {
+    clearProgress();
+    document.getElementById('quiz-form').submit();
+}
+
+// Предупреждение перед закрытием страницы
+window.addEventListener('beforeunload', function(e) {
+    var form = document.getElementById('quiz-form');
+    // Считаем уникальные вопросы с radio и checkbox ответами
+    var answeredRadioQuestions = new Set();
+    form.querySelectorAll('input[type="radio"]:checked').forEach(function(input) {
+        answeredRadioQuestions.add(input.name);
+    });
+    var answeredCheckboxQuestions = new Set();
+    form.querySelectorAll('input[type="checkbox"]:checked').forEach(function(input) {
+        answeredCheckboxQuestions.add(input.name);
+    });
+    var answered = answeredRadioQuestions.size + answeredCheckboxQuestions.size;
+    if (answered > 0 && answered < {{ questions|length }}) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+    }
+});
+
 document.addEventListener('DOMContentLoaded', function() {
+    restoreProgress();
     document.getElementById('timer-display').textContent = formatTime(timeLeft);
     startTimer();
+    
+    // Инициализация drag-and-drop для вопросов на упорядочивание
+    initOrderingQuestions();
 });
+
+// Функция для инициализации drag-and-drop для ordering вопросов
+function initOrderingQuestions() {
+    var containers = document.querySelectorAll('[id^="ordering-container-"]');
+    containers.forEach(function(container) {
+        var items = container.querySelectorAll('.ordering-item');
+        var questionId = container.getAttribute('data-question-id');
+        
+        items.forEach(function(item) {
+            item.addEventListener('dragstart', function(e) {
+                e.dataTransfer.setData('text/plain', this.innerHTML);
+                this.classList.add('opacity-50');
+            });
+            
+            item.addEventListener('dragend', function() {
+                this.classList.remove('opacity-50');
+                updateOrderingAnswer(questionId);
+            });
+            
+            item.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+            
+            item.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var source = document.querySelector('.opacity-50');
+                if (source && source !== this) {
+                    var parent = source.parentNode;
+                    var nextSibling = this.nextSibling === source ? this : this.nextSibling;
+                    parent.insertBefore(source, this.nextSibling);
+                    updateOrderingAnswer(questionId);
+                }
+            });
+        });
+    });
+}
+
+// Обновление скрытого поля с ответом для ordering вопроса
+function updateOrderingAnswer(questionId) {
+    var container = document.getElementById('ordering-container-' + questionId);
+    var items = container.querySelectorAll('.ordering-item span');
+    var order = [];
+    items.forEach(function(item) {
+        order.push(item.textContent.trim());
+    });
+    document.getElementById('ordering-answer-' + questionId).value = order.join('|');
+    updateProgress();
+}
 </script>
 {% endblock %}
 
@@ -93,30 +324,95 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="flex items-start gap-3 mb-5">
                     <span class="w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center flex-shrink-0" style="background-color: #d1fae5; color: #047857;">{{ loop.index }}</span>
                     <h2 class="text-lg font-semibold text-gray-900">{{ q.question_text }}</h2>
+                    {% if q.question_type == "multiple_choice" %}
+                    <span class="text-xs px-2 py-1 rounded-full" style="background-color: #dbeafe; color: #1d4ed8;">Можно выбрать несколько</span>
+                    {% elif q.question_type == "matching" %}
+                    <span class="text-xs px-2 py-1 rounded-full" style="background-color: #fef3c7; color: #b45309;">Сопоставление</span>
+                    {% elif q.question_type == "ordering" %}
+                    <span class="text-xs px-2 py-1 rounded-full" style="background-color: #ede9fe; color: #6d28d9;">Упорядочивание</span>
+                    {% endif %}
                 </div>
                 <div class="space-y-3 pl-11">
+                    {% if q.question_type == "multiple_choice" %}
                     <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
-                        <input type="radio" name="q_{{ q.id }}" value="A" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <input type="checkbox" name="question_{{ q.id }}" value="A" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
                         <span class="option-box flex-1 text-sm text-gray-700"><strong>A.</strong> {{ q.option_a }}</span>
                     </label>
                     <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
-                        <input type="radio" name="q_{{ q.id }}" value="B" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <input type="checkbox" name="question_{{ q.id }}" value="B" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
                         <span class="option-box flex-1 text-sm text-gray-700"><strong>B.</strong> {{ q.option_b }}</span>
                     </label>
                     <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
-                        <input type="radio" name="q_{{ q.id }}" value="C" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <input type="checkbox" name="question_{{ q.id }}" value="C" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
                         <span class="option-box flex-1 text-sm text-gray-700"><strong>C.</strong> {{ q.option_c }}</span>
                     </label>
                     <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
-                        <input type="radio" name="q_{{ q.id }}" value="D" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <input type="checkbox" name="question_{{ q.id }}" value="D" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
                         <span class="option-box flex-1 text-sm text-gray-700"><strong>D.</strong> {{ q.option_d }}</span>
                     </label>
+                    {% elif q.question_type == "matching" %}
+                    <div class="space-y-3">
+                        <p class="text-sm text-gray-600 mb-3">Сопоставьте элементы из левой колонки с элементами из правой:</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <p class="text-xs font-semibold text-gray-500 uppercase">Левая колонка</p>
+                                {% for pair in q.matching_pairs %}
+                                <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <span class="text-sm text-gray-700">{{ pair.left }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="space-y-2">
+                                <p class="text-xs font-semibold text-gray-500 uppercase">Правая колонка (выберите соответствие)</p>
+                                {% for pair in q.matching_pairs %}
+                                <select name="match_{{ q.id }}_{{ loop.index0 }}" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" onchange="updateProgress()">
+                                    <option value="">-- Выберите --</option>
+                                    {% for right_pair in q.matching_pairs %}
+                                    <option value="{{ right_pair.right }}">{{ right_pair.right }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% elif q.question_type == "ordering" %}
+                    <div class="space-y-2">
+                        <p class="text-sm text-gray-600 mb-3">Расположите элементы в правильном порядке:</p>
+                        <div id="ordering-container-{{ q.id }}" class="space-y-2" data-question-id="{{ q.id }}">
+                            {% for item in q.ordering_items %}
+                            <div class="ordering-item p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-move flex items-center gap-3" data-order="{{ item.order }}">
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                                <input type="hidden" name="order_{{ q.id }}[]" value="{{ item.text }}">
+                                <span class="text-sm text-gray-700">{{ item.text }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" id="ordering-answer-{{ q.id }}" name="question_{{ q.id }}" value="">
+                    </div>
+                    {% else %}
+                    <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
+                        <input type="radio" name="question_{{ q.id }}" value="A" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <span class="option-box flex-1 text-sm text-gray-700"><strong>A.</strong> {{ q.option_a }}</span>
+                    </label>
+                    <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
+                        <input type="radio" name="question_{{ q.id }}" value="B" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <span class="option-box flex-1 text-sm text-gray-700"><strong>B.</strong> {{ q.option_b }}</span>
+                    </label>
+                    <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
+                        <input type="radio" name="question_{{ q.id }}" value="C" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <span class="option-box flex-1 text-sm text-gray-700"><strong>C.</strong> {{ q.option_c }}</span>
+                    </label>
+                    <label class="option-label flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-emerald-300 transition">
+                        <input type="radio" name="question_{{ q.id }}" value="D" class="w-4 h-4" style="accent-color: #059669;" onchange="updateProgress()">
+                        <span class="option-box flex-1 text-sm text-gray-700"><strong>D.</strong> {{ q.option_d }}</span>
+                    </label>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
 
             <div class="text-center pt-4">
-                <button type="submit" class="inline-flex items-center gap-2 px-8 py-3.5 font-semibold rounded-xl transition shadow-lg" style="background-color: #059669; color: #ffffff;">
+                <button type="button" onclick="showConfirmModal()" class="inline-flex items-center gap-2 px-8 py-3.5 font-semibold rounded-xl transition shadow-lg" style="background-color: #059669; color: #ffffff;">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                     Завершить тест
                 </button>
@@ -126,5 +422,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
     </div>
 </main>
+
+<!-- Модальное окно подтверждения -->
+<div id="confirm-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md mx-4">
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 mb-2">Завершить тест?</h3>
+            <p id="confirm-message" class="text-gray-600"></p>
+        </div>
+        
+        <div id="unanswered-warning" class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 hidden">
+            <p class="text-sm text-amber-800"><strong>Внимание!</strong> Вы можете изменить ответы перед отправкой.</p>
+        </div>
+        
+        <div class="flex gap-3">
+            <button type="button" onclick="hideConfirmModal()" class="flex-1 px-6 py-3 font-semibold rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition">
+                Продолжить
+            </button>
+            <button type="button" onclick="submitQuiz()" class="flex-1 px-6 py-3 font-semibold rounded-xl transition" style="background-color: #059669; color: #ffffff;">
+                Отправить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно истечения времени -->
+<div id="timeup-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md mx-4">
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 mb-2">Время вышло!</h3>
+            <p class="text-gray-600">Тест будет отправлен автоматически с текущими ответами.</p>
+        </div>
+        
+        <button type="button" onclick="submitOnTimeUp()" class="w-full px-6 py-3 font-semibold rounded-xl transition" style="background-color: #059669; color: #ffffff;">
+            Отправить результаты
+        </button>
+    </div>
+</div>
 
 {% endblock %}
