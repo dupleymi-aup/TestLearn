@@ -5,9 +5,10 @@
 from fastapi import APIRouter, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 import os
+import secrets
 
 from app.deps.auth import (
-    get_current_admin, create_admin_session, 
+    get_current_admin, create_admin_session,
     verify_password, get_admin_password_hash,
     generate_csrf_token
 )
@@ -41,15 +42,19 @@ async def admin_dashboard(request: Request, admin: bool = Depends(get_current_ad
 async def admin_login_page(request: Request):
     """Страница входа администратора."""
     templates = request.app.state.templates
-    
+
     # Проверяем, есть ли активная сессия
     from app.deps.auth import verify_admin_session
     if verify_admin_session(request):
         return RedirectResponse(url="/admin", status_code=303)
-    
+
+    csrf_token = generate_csrf_token()
+    # Сохраняем токен в сессии для валидации при отправке формы
+    request.session["csrf_token"] = csrf_token
+
     return templates.TemplateResponse(request, "admin/login.html", {
         "error": None,
-        "csrf_token": generate_csrf_token()
+        "csrf_token": csrf_token
     })
 
 
@@ -58,31 +63,40 @@ async def admin_login_submit(request: Request):
     """Обработка входа администратора."""
     templates = request.app.state.templates
     form = await request.form()
-    
+
+    # Валидация CSRF токена
+    csrf_token = form.get("csrf_token")
+    stored_token = request.session.get("csrf_token")
+    if not csrf_token or not stored_token or not secrets.compare_digest(csrf_token, stored_token):
+        return templates.TemplateResponse(request, "admin/login.html", {
+            "error": "Ошибка безопасности: неверный CSRF токен. Пожалуйста, обновите страницу и попробуйте снова.",
+            "csrf_token": generate_csrf_token()
+        })
+
     username = form.get("username", "").strip()
     password = form.get("password", "")
-    
+
     # Проверяем учётные данные
     admin_username = os.getenv("ADMIN_USERNAME", "admin")
-    
+
     if username != admin_username:
         return templates.TemplateResponse(request, "admin/login.html", {
             "error": "Неверное имя пользователя или пароль",
             "csrf_token": generate_csrf_token()
         })
-    
+
     # Для простоты проверяем пароль напрямую (в продакшене использовать хеш)
     expected_password = os.getenv("ADMIN_PASSWORD", "admin")
-    
+
     if password != expected_password:
         return templates.TemplateResponse(request, "admin/login.html", {
             "error": "Неверное имя пользователя или пароль",
             "csrf_token": generate_csrf_token()
         })
-    
+
     # Создаём сессию
     session_id = create_admin_session(username)
-    
+
     response = RedirectResponse(url="/admin", status_code=303)
     response.set_cookie(key="admin_session", value=session_id, httponly=True, max_age=86400)
     return response
@@ -102,21 +116,26 @@ async def create_category_route(
     admin: bool = Depends(get_current_admin)
 ):
     """Создание категории."""
+    # Валидация CSRF токена
     form = await request.form()
-    
+    csrf_token = form.get("csrf_token")
+    stored_token = request.session.get("csrf_token")
+    if not csrf_token or not stored_token or not secrets.compare_digest(csrf_token, stored_token):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+
     name = form.get("name", "").strip()
     slug = form.get("slug", "").strip()
     description = form.get("description", "").strip()
     icon = form.get("icon", "check-circle")
-    
+
     if not name or not slug:
         raise HTTPException(status_code=400, detail="Название и slug обязательны")
-    
+
     success = create_category(name, slug, description, icon)
-    
+
     if not success:
         raise HTTPException(status_code=400, detail="Ошибка при создании категории")
-    
+
     return RedirectResponse(url="/admin", status_code=303)
 
 
@@ -126,21 +145,26 @@ async def create_topic_route(
     admin: bool = Depends(get_current_admin)
 ):
     """Создание темы."""
+    # Валидация CSRF токена
     form = await request.form()
-    
+    csrf_token = form.get("csrf_token")
+    stored_token = request.session.get("csrf_token")
+    if not csrf_token or not stored_token or not secrets.compare_digest(csrf_token, stored_token):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+
     category_id = int(form.get("category_id", 0))
     title = form.get("title", "").strip()
     content = form.get("content", "").strip()
     order_num = int(form.get("order_num", 0))
-    
+
     if not category_id or not title or not content:
         raise HTTPException(status_code=400, detail="Все поля обязательны")
-    
+
     success = create_topic(category_id, title, content, order_num)
-    
+
     if not success:
         raise HTTPException(status_code=400, detail="Ошибка при создании темы")
-    
+
     return RedirectResponse(url="/admin", status_code=303)
 
 
@@ -150,21 +174,26 @@ async def create_quiz_route(
     admin: bool = Depends(get_current_admin)
 ):
     """Создание теста."""
+    # Валидация CSRF токена
     form = await request.form()
-    
+    csrf_token = form.get("csrf_token")
+    stored_token = request.session.get("csrf_token")
+    if not csrf_token or not stored_token or not secrets.compare_digest(csrf_token, stored_token):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+
     category_id = form.get("category_id")
     category_id = int(category_id) if category_id else None
     title = form.get("title", "").strip()
     description = form.get("description", "").strip()
-    
+
     if not title:
         raise HTTPException(status_code=400, detail="Название обязательно")
-    
+
     success = create_quiz(category_id, title, description)
-    
+
     if not success:
         raise HTTPException(status_code=400, detail="Ошибка при создании теста")
-    
+
     return RedirectResponse(url="/admin", status_code=303)
 
 
@@ -174,8 +203,13 @@ async def create_question_route(
     admin: bool = Depends(get_current_admin)
 ):
     """Создание вопроса."""
+    # Валидация CSRF токена
     form = await request.form()
-    
+    csrf_token = form.get("csrf_token")
+    stored_token = request.session.get("csrf_token")
+    if not csrf_token or not stored_token or not secrets.compare_digest(csrf_token, stored_token):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+
     quiz_id = int(form.get("quiz_id", 0))
     question_text = form.get("question_text", "").strip()
     option_a = form.get("option_a", "").strip()
@@ -185,10 +219,10 @@ async def create_question_route(
     correct_option = form.get("correct_option", "").strip()
     explanation = form.get("explanation", "").strip()
     order_num = int(form.get("order_num", 0))
-    
+
     if not quiz_id or not question_text or not correct_option:
         raise HTTPException(status_code=400, detail="Обязательные поля не заполнены")
-    
+
     success = create_question(
         quiz_id=quiz_id,
         question_text=question_text,
@@ -200,8 +234,8 @@ async def create_question_route(
         explanation=explanation,
         order_num=order_num
     )
-    
+
     if not success:
         raise HTTPException(status_code=400, detail="Ошибка при создании вопроса")
-    
+
     return RedirectResponse(url="/admin", status_code=303)
