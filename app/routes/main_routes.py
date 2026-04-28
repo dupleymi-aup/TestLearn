@@ -3,14 +3,14 @@
 """
 
 from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from app.services.data_service import (
     get_all_categories, get_category_by_slug, get_topics_by_category,
     get_topic_by_id, get_all_quizzes, get_quiz_by_id, get_questions_by_quiz,
     save_quiz_result, get_all_glossary_terms, search_glossary,
-    create_feedback, get_user_stats, add_xp, check_achievements,
+    create_feedback, get_all_feedback, get_user_stats, add_xp, check_achievements,
     get_platform_stats
 )
 from app.database.db import get_db, DB_NAME
@@ -395,10 +395,10 @@ async def bookmarks_page(request: Request):
     """Страница закладок пользователя."""
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
-    
+
     if not user:
         return RedirectResponse(url="/login", status_code=303)
-    
+
     # Получаем закладки пользователя из БД
     with get_db() as conn:
         cursor = conn.cursor()
@@ -423,9 +423,74 @@ async def bookmarks_page(request: Request):
             }
             for r in rows
         ]
-    
+
     return templates.TemplateResponse(request, "bookmarks.html", {
         "bookmarks": bookmarks,
         "user": user,
         "csrf_token": generate_csrf_token()
     })
+
+
+# ====== API ENDPOINTS ======
+
+@router.get("/api/stats", response_class=JSONResponse)
+async def api_stats():
+    """Получить общую статистику платформы."""
+    stats = get_platform_stats()
+    return JSONResponse(content=stats)
+
+
+@router.get("/api/categories", response_class=JSONResponse)
+async def api_categories():
+    """Получить список всех категорий."""
+    categories = get_all_categories()
+    # Преобразуем в словари для JSON serialization
+    categories_data = [
+        {
+            "id": cat.id,
+            "name": cat.name,
+            "slug": cat.slug,
+            "description": cat.description,
+            "icon": cat.icon
+        }
+        for cat in categories
+    ]
+    return JSONResponse(content=categories_data)
+
+
+@router.get("/api/quiz/{quiz_id}/questions", response_class=JSONResponse)
+async def api_quiz_questions(quiz_id: int):
+    """Получить вопросы для конкретного теста (без правильных ответов)."""
+    questions = get_questions_by_quiz(quiz_id)
+    # Преобразуем в словари, исключая правильные ответы и объяснения
+    questions_data = [
+        {
+            "id": q.id,
+            "question_text": q.question_text,
+            "option_a": q.option_a,
+            "option_b": q.option_b,
+            "option_c": q.option_c,
+            "option_d": q.option_d
+        }
+        for q in questions
+    ]
+    return JSONResponse(content=questions_data)
+
+
+@router.get("/api/feedback", response_class=JSONResponse)
+async def api_feedback():
+    """Получить最近的 отзывы пользователей."""
+    feedbacks = get_all_feedback()
+    # Ограничиваем последними 10 отзывами и преобразуем в словари
+    feedbacks_data = [
+        {
+            "id": fb.id,
+            "name": fb.name,
+            "email": fb.email,
+            "message": fb.message,
+            "rating": fb.rating,
+            "created_at": fb.created_at
+        }
+        for fb in feedbacks[:10]  # Последние 10 отзывов
+    ]
+    return JSONResponse(content=feedbacks_data)
