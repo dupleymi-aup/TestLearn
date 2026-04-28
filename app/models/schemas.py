@@ -31,6 +31,10 @@ class Quiz:
     category_id: Optional[int]
     title: str
     description: str
+    # Additional fields for statistics (populated by get_all_quizzes)
+    attempt_count: int = 0
+    avg_score: float = 0.0
+    best_score: float = 0.0
 
 
 @dataclass

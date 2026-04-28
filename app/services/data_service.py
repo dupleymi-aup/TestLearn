@@ -84,30 +84,126 @@ def create_topic(category_id: int, title: str, content: str, order_num: int = 0)
 # ====== ТЕСТЫ ======
 
 def get_all_quizzes() -> List[Quiz]:
-    """Получить все тесты."""
+    """Получить все тесты с дополнительной статистикой."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM quizzes ORDER BY id")
+        # Получаем базовую информацию о тестах с подсчетом вопросов и названием категории
+        cursor = conn.execute("""
+            SELECT q.*, 
+                   c.name as category_name,
+                   COUNT(DISTINCT qr.id) as attempt_count,
+                   AVG(qr.score * 1.0 / qr.total) as avg_score,
+                   MAX(qr.score * 1.0 / qr.total) as best_score,
+                   COUNT(DISTINCT qe.id) as question_count
+            FROM quizzes q
+            LEFT JOIN categories c ON q.category_id = c.id
+            LEFT JOIN quiz_results qr ON q.id = qr.quiz_id
+            LEFT JOIN questions qe ON q.id = qe.quiz_id
+            GROUP BY q.id, c.name
+            ORDER BY q.id
+        """)
         rows = cursor.fetchall()
-        return [Quiz(**dict(row)) for row in rows]
+        
+        # Создаем объекты Quiz с дополнительными атрибутами
+        quizzes = []
+        for row in rows:
+            quiz_dict = dict(row)
+            # Создаем базовый объект Quiz
+            quiz = Quiz(
+                id=quiz_dict['id'],
+                category_id=quiz_dict['category_id'],
+                title=quiz_dict['title'],
+                description=quiz_dict['description']
+            )
+            # Добавляем дополнительные атрибуты как свойства объекта
+            quiz.attempt_count = quiz_dict['attempt_count'] or 0
+            quiz.avg_score = quiz_dict['avg_score'] or 0.0
+            quiz.best_score = quiz_dict['best_score'] or 0.0
+            quiz.question_count = quiz_dict['question_count'] or 0
+            quiz.category_name = quiz_dict['category_name'] or ""
+            quizzes.append(quiz)
+            
+        return quizzes
 
 
 def get_quizzes_by_category(category_id: int) -> List[Quiz]:
-    """Получить тесты по категории."""
+    """Получить тесты по категории со статистикой."""
     with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM quizzes WHERE category_id = ? ORDER BY id",
-            (category_id,)
-        )
+        # Получаем информацию о тестах со статистикой и названием категории
+        cursor = conn.execute("""
+            SELECT q.*, 
+                   c.name as category_name,
+                   COUNT(DISTINCT qr.id) as attempt_count,
+                   AVG(qr.score * 1.0 / qr.total) as avg_score,
+                   MAX(qr.score * 1.0 / qr.total) as best_score,
+                   COUNT(DISTINCT qe.id) as question_count
+            FROM quizzes q
+            LEFT JOIN categories c ON q.category_id = c.id
+            LEFT JOIN quiz_results qr ON q.id = qr.quiz_id
+            LEFT JOIN questions qe ON q.id = qe.quiz_id
+            WHERE q.category_id = ?
+            GROUP BY q.id, c.name
+            ORDER BY q.id
+        """, (category_id,))
         rows = cursor.fetchall()
-        return [Quiz(**dict(row)) for row in rows]
+        
+        # Создаем объекты Quiz с дополнительными атрибутами
+        quizzes = []
+        for row in rows:
+            quiz_dict = dict(row)
+            # Создаем базовый объект Quiz
+            quiz = Quiz(
+                id=quiz_dict['id'],
+                category_id=quiz_dict['category_id'],
+                title=quiz_dict['title'],
+                description=quiz_dict['description']
+            )
+            # Добавляем дополнительные атрибуты как свойства объекта
+            quiz.attempt_count = quiz_dict['attempt_count'] or 0
+            quiz.avg_score = quiz_dict['avg_score'] or 0.0
+            quiz.best_score = quiz_dict['best_score'] or 0.0
+            quiz.question_count = quiz_dict['question_count'] or 0
+            quiz.category_name = quiz_dict['category_name'] or ""
+            quizzes.append(quiz)
+            
+        return quizzes
 
 
 def get_quiz_by_id(quiz_id: int) -> Optional[Quiz]:
-    """Получить тест по ID."""
+    """Получить тест по ID со статистикой."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM quizzes WHERE id = ?", (quiz_id,))
+        # Получаем информацию о тесте со статистикой и названием категории
+        cursor = conn.execute("""
+            SELECT q.*, 
+                   c.name as category_name,
+                   COUNT(DISTINCT qr.id) as attempt_count,
+                   AVG(qr.score * 1.0 / qr.total) as avg_score,
+                   MAX(qr.score * 1.0 / qr.total) as best_score,
+                   COUNT(DISTINCT qe.id) as question_count
+            FROM quizzes q
+            LEFT JOIN categories c ON q.category_id = c.id
+            LEFT JOIN quiz_results qr ON q.id = qr.quiz_id
+            LEFT JOIN questions qe ON q.id = qe.quiz_id
+            WHERE q.id = ?
+            GROUP BY q.id, c.name
+        """, (quiz_id,))
         row = cursor.fetchone()
-        return Quiz(**dict(row)) if row else None
+        if row:
+            quiz_dict = dict(row)
+            # Создаем базовый объект Quiz
+            quiz = Quiz(
+                id=quiz_dict['id'],
+                category_id=quiz_dict['category_id'],
+                title=quiz_dict['title'],
+                description=quiz_dict['description']
+            )
+            # Добавляем дополнительные атрибуты как свойства объекта
+            quiz.attempt_count = quiz_dict['attempt_count'] or 0
+            quiz.avg_score = quiz_dict['avg_score'] or 0.0
+            quiz.best_score = quiz_dict['best_score'] or 0.0
+            quiz.question_count = quiz_dict['question_count'] or 0
+            quiz.category_name = quiz_dict['category_name'] or ""
+            return quiz
+        return None
 
 
 def create_quiz(category_id: Optional[int], title: str, description: str = "") -> bool:

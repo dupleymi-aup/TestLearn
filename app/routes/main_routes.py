@@ -378,10 +378,14 @@ async def quiz_list_page(request: Request):
     templates = request.app.state.templates
     quizzes = get_all_quizzes()
     user = get_current_user_from_session(request)
-    
+
+    # Calculate total attempts across all quizzes
+    total_attempts = sum(quiz.attempt_count for quiz in quizzes)
+
     return templates.TemplateResponse(request, "quiz_list.html", {
         "quizzes": quizzes,
         "user": user,
+        "total_attempts": total_attempts,
         "csrf_token": generate_csrf_token()
     })
 
