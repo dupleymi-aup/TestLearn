@@ -32,6 +32,14 @@ def get_category_by_slug(slug: str) -> Optional[Category]:
         return Category(**dict(row)) if row else None
 
 
+def get_category_by_id(category_id: int) -> Optional[Category]:
+    """Получить категорию по ID."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM categories WHERE id = ?", (category_id,))
+        row = cursor.fetchone()
+        return Category(**dict(row)) if row else None
+
+
 def create_category(name: str, slug: str, description: str = "", icon: str = "check-circle") -> bool:
     """Создать новую категорию."""
     try:
@@ -40,6 +48,31 @@ def create_category(name: str, slug: str, description: str = "", icon: str = "ch
                 "INSERT INTO categories (name, slug, description, icon) VALUES (?, ?, ?, ?)",
                 (name, slug, description, icon)
             )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def update_category(category_id: int, name: str, slug: str, description: str, icon: str) -> bool:
+    """Обновить категорию."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE categories SET name = ?, slug = ?, description = ?, icon = ? WHERE id = ?",
+                (name, slug, description, icon, category_id)
+            )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_category(category_id: int) -> bool:
+    """Удалить категорию."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
             conn.commit()
         return True
     except Exception:
@@ -75,6 +108,31 @@ def create_topic(category_id: int, title: str, content: str, order_num: int = 0)
                 "INSERT INTO topics (category_id, title, content, order_num) VALUES (?, ?, ?, ?)",
                 (category_id, title, content, order_num)
             )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def update_topic(topic_id: int, category_id: int, title: str, content: str, order_num: int) -> bool:
+    """Обновить тему."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE topics SET category_id = ?, title = ?, content = ?, order_num = ? WHERE id = ?",
+                (category_id, title, content, order_num, topic_id)
+            )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_topic(topic_id: int) -> bool:
+    """Удалить тему."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
             conn.commit()
         return True
     except Exception:
@@ -233,6 +291,14 @@ def get_questions_by_quiz(quiz_id: int) -> List[Question]:
         return [Question(**dict(row)) for row in rows]
 
 
+def get_question_by_id(question_id: int) -> Optional[Question]:
+    """Получить вопрос по ID."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
+        row = cursor.fetchone()
+        return Question(**dict(row)) if row else None
+
+
 def create_question(
     quiz_id: int,
     question_text: str,
@@ -248,17 +314,49 @@ def create_question(
     """Создать новый вопрос."""
     if correct_option not in ("A", "B", "C", "D"):
         return False
-    
+
     try:
         with get_db() as conn:
             conn.execute(
-                """INSERT INTO questions 
-                   (quiz_id, question_text, option_a, option_b, option_c, option_d, 
-                    correct_option, explanation, order_num, question_type) 
+                """INSERT INTO questions
+                   (quiz_id, question_text, option_a, option_b, option_c, option_d,
+                    correct_option, explanation, order_num, question_type)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (quiz_id, question_text, option_a, option_b, option_c, option_d,
                  correct_option, explanation, order_num, question_type)
             )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def update_question(question_id: int, quiz_id: int, question_text: str, option_a: str, option_b: str, option_c: str, option_d: str, correct_option: str, explanation: str, order_num: int) -> bool:
+    """Обновить вопрос."""
+    if correct_option not in ("A", "B", "C", "D"):
+        return False
+
+    try:
+        with get_db() as conn:
+            conn.execute(
+                """UPDATE questions
+                   SET quiz_id = ?, question_text = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?,
+                       correct_option = ?, explanation = ?, order_num = ?
+                   WHERE id = ?""",
+                (quiz_id, question_text, option_a, option_b, option_c, option_d,
+                 correct_option, explanation, order_num, question_id)
+            )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_question(question_id: int) -> bool:
+    """Удалить вопрос."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM questions WHERE id = ?", (question_id,))
             conn.commit()
         return True
     except Exception:
@@ -322,6 +420,61 @@ def search_glossary(query: str) -> List[GlossaryTerm]:
         )
         rows = cursor.fetchall()
         return [GlossaryTerm(**dict(row)) for row in rows]
+
+
+def get_glossary_by_letter(letter: str) -> List[GlossaryTerm]:
+    """Получить термины словаря по букве."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM glossary WHERE letter = ? ORDER BY term", (letter.upper(),))
+        rows = cursor.fetchall()
+        return [GlossaryTerm(**dict(row)) for row in rows]
+
+
+def get_glossary_by_id(term_id: int) -> Optional[GlossaryTerm]:
+    """Получить термин словаря по ID."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM glossary WHERE id = ?", (term_id,))
+        row = cursor.fetchone()
+        return GlossaryTerm(**dict(row)) if row else None
+
+
+def create_glossary_term(term: str, definition: str, letter: str) -> bool:
+    """Создать новый термин словаря."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO glossary (term, definition, letter) VALUES (?, ?, ?)",
+                (term, definition, letter.upper())
+            )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def update_glossary_term(term_id: int, term: str, definition: str, letter: str) -> bool:
+    """Обновить термин словаря."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE glossary SET term = ?, definition = ?, letter = ? WHERE id = ?",
+                (term, definition, letter.upper(), term_id)
+            )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def delete_glossary_term(term_id: int) -> bool:
+    """Удалить термин словаря."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM glossary WHERE id = ?", (term_id,))
+            conn.commit()
+        return True
+    except Exception:
+        return False
 
 
 # ====== ОТЗЫВЫ ======

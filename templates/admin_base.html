@@ -2,13 +2,20 @@
 
 {% block title %}Админ-панель - TestLearn{% endblock %}
 
+{% block extra_js %}
+<script>
+  window.csrfToken = "{{ csrf_token }}";
+</script>
+{{ super() }}
+{% endblock %}
+
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     <header class="mb-8">
         <h1 class="text-3xl font-bold text-gray-800">Админ-панель</h1>
         <p class="text-gray-600">Управление контентом платформы</p>
     </header>
-    
+
     <nav class="mb-6">
         <div class="flex space-x-4">
             <a href="/admin/categories" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">Категории</a>
@@ -17,7 +24,7 @@
             <a href="/admin/glossary" class="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition">Глоссарий</a>
         </div>
     </nav>
-    
+
     <div class="bg-white rounded-lg shadow-md p-6">
         {% block admin_content %}{% endblock %}
     </div>

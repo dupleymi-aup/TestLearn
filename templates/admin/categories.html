@@ -113,7 +113,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 'name': name,
                 'slug': slug,
                 'description': description,
-                'icon': icon
+                'icon': icon,
+                'csrf_token': window.csrfToken
             })
         })
         .then(response => {
@@ -200,7 +201,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Функция удаления категории
     function deleteCategory(id) {
         fetch(`/admin/api/categories/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                'csrf_token': window.csrfToken
+            })
         })
         .then(response => {
             if (!response.ok) {

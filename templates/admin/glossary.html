@@ -231,7 +231,8 @@ document.addEventListener('DOMContentLoaded', function() {
             body: new URLSearchParams({
                 'term': term,
                 'definition': definition,
-                'letter': letter
+                'letter': letter,
+                'csrf_token': window.csrfToken
             })
         })
         .then(response => {
@@ -272,7 +273,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Функция удаления термина
     function deleteTerm(id) {
         fetch(`/admin/api/glossary/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                'csrf_token': window.csrfToken
+            })
         })
         .then(response => {
             if (!response.ok) {

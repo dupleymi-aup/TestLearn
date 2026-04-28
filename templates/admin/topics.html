@@ -208,7 +208,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 'category_id': categoryId,
                 'title': title,
                 'content': content,
-                'order_num': orderNum
+                'order_num': orderNum,
+                'csrf_token': window.csrfToken
             })
         })
         .then(response => {
@@ -250,7 +251,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Функция удаления темы
     function deleteTopic(id) {
         fetch(`/admin/api/topics/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                'csrf_token': window.csrfToken
+            })
         })
         .then(response => {
             if (!response.ok) {
