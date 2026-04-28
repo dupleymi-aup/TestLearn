@@ -27,21 +27,21 @@ async def lifespan(app: FastAPI):
     """Современный lifespan API для инициализации приложения."""
     # Startup: инициализация БД
     init_database()
-    
+
     # Настройка шаблонов и статики
     static_path = os.path.join(os.path.dirname(__file__), "static")
     templates_path = os.path.join(os.path.dirname(__file__), "templates")
-    
+
     # Монтируем статику
     if os.path.exists(static_path):
         app.mount("/static", StaticFiles(directory=static_path), name="static")
-    
+
     # Сохраняем templates в state для доступа из роутов
     app.state.templates = Jinja2Templates(directory=templates_path)
     app.state.static_path = static_path
-    
+
     yield
-    
+
     # Shutdown: очистка ресурсов (если нужно)
     pass
 
