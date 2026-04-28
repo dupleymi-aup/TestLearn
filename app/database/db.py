@@ -58,6 +58,7 @@ def init_database():
                 category_id INTEGER,
                 title TEXT NOT NULL,
                 description TEXT DEFAULT '',
+                time_limit INTEGER DEFAULT 600,
                 FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
             )
         """)
@@ -72,11 +73,35 @@ def init_database():
                 option_b TEXT NOT NULL,
                 option_c TEXT NOT NULL,
                 option_d TEXT NOT NULL,
-                correct_option TEXT NOT NULL CHECK(correct_option IN ('A','B','C','D')),
+                correct_option TEXT NOT NULL,
                 explanation TEXT DEFAULT '',
                 order_num INTEGER DEFAULT 0,
                 question_type TEXT DEFAULT 'single_choice',
+                expected_answer TEXT,
                 FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Таблица для вопросов на сопоставление (matching)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS matching_pairs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_id INTEGER NOT NULL,
+                left_item TEXT NOT NULL,
+                right_item TEXT NOT NULL,
+                pair_order INTEGER DEFAULT 0,
+                FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Таблица для вопросов на упорядочивание (ordering)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ordering_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_id INTEGER NOT NULL,
+                item_text TEXT NOT NULL,
+                correct_order INTEGER NOT NULL,
+                FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
             )
         """)
 

@@ -84,9 +84,29 @@ def create_topic(category_id: int, title: str, content: str, order_num: int = 0)
 # ====== ТЕСТЫ ======
 
 def get_all_quizzes() -> List[Quiz]:
-    """Получить все тесты."""
+    """Получить все тесты с дополнительной статистикой."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM quizzes ORDER BY id")
+        cursor = conn.execute("""
+            SELECT q.*, 
+                   c.name as category_name,
+                   COUNT(DISTINCT qu.id) as question_count,
+                   COALESCE(stats.attempt_count, 0) as attempt_count,
+                   stats.best_score,
+                   stats.avg_score
+            FROM quizzes q
+            LEFT JOIN categories c ON q.category_id = c.id
+            LEFT JOIN questions qu ON q.id = qu.quiz_id
+            LEFT JOIN (
+                SELECT quiz_id,
+                       COUNT(*) as attempt_count,
+                       AVG(score * 1.0 / total) as avg_score,
+                       MAX(score * 1.0 / total) as best_score
+                FROM quiz_results
+                GROUP BY quiz_id
+            ) stats ON q.id = stats.quiz_id
+            GROUP BY q.id
+            ORDER BY q.id
+        """)
         rows = cursor.fetchall()
         return [Quiz(**dict(row)) for row in rows]
 
@@ -134,35 +154,82 @@ def get_questions_by_quiz(quiz_id: int) -> List[Question]:
             (quiz_id,)
         )
         rows = cursor.fetchall()
-        return [Question(**dict(row)) for row in rows]
+        questions = []
+        for row in rows:
+            q_dict = dict(row)
+            question = Question(**q_dict)
+            
+            # Загружаем дополнительные данные для разных типов вопросов
+            if question.question_type == "matching":
+                cursor.execute(
+                    "SELECT left_item, right_item, pair_order FROM matching_pairs WHERE question_id = ? ORDER BY pair_order",
+                    (question.id,)
+                )
+                pairs = cursor.fetchall()
+                question.matching_pairs = [{"left": p[0], "right": p[1], "order": p[2]} for p in pairs]
+            elif question.question_type == "ordering":
+                cursor.execute(
+                    "SELECT item_text, correct_order FROM ordering_items WHERE question_id = ? ORDER BY correct_order",
+                    (question.id,)
+                )
+                items = cursor.fetchall()
+                question.ordering_items = [{"text": i[0], "order": i[1]} for i in items]
+            
+            questions.append(question)
+        
+        return questions
 
 
 def create_question(
     quiz_id: int,
     question_text: str,
-    option_a: str,
-    option_b: str,
-    option_c: str,
-    option_d: str,
-    correct_option: str,
+    option_a: str = "",
+    option_b: str = "",
+    option_c: str = "",
+    option_d: str = "",
+    correct_option: str = "",
     explanation: str = "",
     order_num: int = 0,
-    question_type: str = "single_choice"
+    question_type: str = "single_choice",
+    matching_pairs: Optional[List[dict]] = None,
+    ordering_items: Optional[List[dict]] = None,
+    expected_answer: Optional[str] = None
 ) -> bool:
     """Создать новый вопрос."""
-    if correct_option not in ("A", "B", "C", "D"):
-        return False
+    # Для single_choice и multiple_choice проверяем правильность опции
+    if question_type in ("single_choice", "multiple_choice"):
+        if correct_option not in ("A", "B", "C", "D", ""):
+            return False
     
     try:
         with get_db() as conn:
-            conn.execute(
+            cursor = conn.cursor()
+            cursor.execute(
                 """INSERT INTO questions 
                    (quiz_id, question_text, option_a, option_b, option_c, option_d, 
-                    correct_option, explanation, order_num, question_type) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    correct_option, explanation, order_num, question_type, expected_answer) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (quiz_id, question_text, option_a, option_b, option_c, option_d,
-                 correct_option, explanation, order_num, question_type)
+                 correct_option, explanation, order_num, question_type, expected_answer)
             )
+            question_id = cursor.lastrowid
+            
+            # Если это вопрос на сопоставление, добавляем пары
+            if question_type == "matching" and matching_pairs:
+                for pair in matching_pairs:
+                    cursor.execute(
+                        "INSERT INTO matching_pairs (question_id, left_item, right_item, pair_order) VALUES (?, ?, ?, ?)",
+                        (question_id, pair["left"], pair["right"], pair.get("order", 0))
+                    )
+            
+            # Если это вопрос на упорядочивание, добавляем элементы
+            elif question_type == "ordering" and ordering_items:
+                for item in ordering_items:
+                    cursor.execute(
+                        "INSERT INTO ordering_items (question_id, item_text, correct_order) VALUES (?, ?, ?)",
+                        (question_id, item["text"], item["order"])
+                    )
+            
             conn.commit()
         return True
     except Exception:

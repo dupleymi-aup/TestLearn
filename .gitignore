@@ -1,14 +1,11 @@
 ```
-# Compiled Python files
-*.pyc
+# Python
 __pycache__/
-
-# Logs
-*.log
-server.log
+*.pyc
+*.pyo
+*.pyd
 
 # Database
-*.db
 testlearn.db
 
 # Environment
@@ -16,30 +13,24 @@ testlearn.db
 .env.local
 *.env.*
 
-# Dependencies
-.venv/
-venv/
-node_modules/
+# Logs
+*.log
 
-# Build artifacts
-dist/
-build/
-target/
+# Temporary files
+*.tmp
+*.swp
+*~
 
-# Editors
+# Coverage
+.coverage
+htmlcov/
+coverage/
+
+# IDE
 .vscode/
 .idea/
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# Cache
-.mypy_cache/
-.pytest_cache/
 ```

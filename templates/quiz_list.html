@@ -45,6 +45,14 @@
                     <div class="text-sm font-semibold text-gray-600">
                         {{ quiz.question_count }} {{ 'вопрос' if quiz.question_count == 1 else ('вопроса' if quiz.question_count in [2, 3, 4] else 'вопросов') }}
                     </div>
+                    
+                    <!-- Время на прохождение -->
+                    {% set time_limit = quiz.time_limit or 600 %}
+                    {% set mins = (time_limit // 60) | int %}
+                    <div class="flex items-center gap-1.5 text-xs text-gray-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>{{ mins }} мин</span>
+                    </div>
 
                     {% if quiz.attempt_count and quiz.attempt_count > 0 %}
                     <!-- Сложность -->
