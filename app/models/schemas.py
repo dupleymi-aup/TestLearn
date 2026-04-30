@@ -31,10 +31,13 @@ class Quiz:
     category_id: Optional[int]
     title: str
     description: str
-    # Additional fields for statistics (populated by get_all_quizzes)
+    time_limit: int = 600
+    # Дополнительные поля для отображения (не из БД)
+    category_name: Optional[str] = None
+    question_count: int = 0
     attempt_count: int = 0
-    avg_score: float = 0.0
-    best_score: float = 0.0
+    best_score: Optional[float] = None
+    avg_score: Optional[float] = None
 
 
 @dataclass
@@ -50,6 +53,11 @@ class Question:
     explanation: str
     order_num: int
     question_type: str = "single_choice"
+    # Дополнительные поля для разных типов вопросов
+    matching_pairs: Optional[List[dict]] = None  # Для типа "matching"
+    ordering_items: Optional[List[dict]] = None  # Для типа "ordering"
+    # Поле для текста ответа (для типа "text_input")
+    expected_answer: Optional[str] = None  # Ожидаемый текстовый ответ
 
 
 @dataclass

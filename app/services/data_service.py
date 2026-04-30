@@ -32,14 +32,6 @@ def get_category_by_slug(slug: str) -> Optional[Category]:
         return Category(**dict(row)) if row else None
 
 
-def get_category_by_id(category_id: int) -> Optional[Category]:
-    """Получить категорию по ID."""
-    with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM categories WHERE id = ?", (category_id,))
-        row = cursor.fetchone()
-        return Category(**dict(row)) if row else None
-
-
 def create_category(name: str, slug: str, description: str = "", icon: str = "check-circle") -> bool:
     """Создать новую категорию."""
     try:
@@ -48,31 +40,6 @@ def create_category(name: str, slug: str, description: str = "", icon: str = "ch
                 "INSERT INTO categories (name, slug, description, icon) VALUES (?, ?, ?, ?)",
                 (name, slug, description, icon)
             )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def update_category(category_id: int, name: str, slug: str, description: str, icon: str) -> bool:
-    """Обновить категорию."""
-    try:
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE categories SET name = ?, slug = ?, description = ?, icon = ? WHERE id = ?",
-                (name, slug, description, icon, category_id)
-            )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def delete_category(category_id: int) -> bool:
-    """Удалить категорию."""
-    try:
-        with get_db() as conn:
-            conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
             conn.commit()
         return True
     except Exception:
@@ -114,154 +81,53 @@ def create_topic(category_id: int, title: str, content: str, order_num: int = 0)
         return False
 
 
-def update_topic(topic_id: int, category_id: int, title: str, content: str, order_num: int) -> bool:
-    """Обновить тему."""
-    try:
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE topics SET category_id = ?, title = ?, content = ?, order_num = ? WHERE id = ?",
-                (category_id, title, content, order_num, topic_id)
-            )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def delete_topic(topic_id: int) -> bool:
-    """Удалить тему."""
-    try:
-        with get_db() as conn:
-            conn.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
 # ====== ТЕСТЫ ======
 
 def get_all_quizzes() -> List[Quiz]:
     """Получить все тесты с дополнительной статистикой."""
     with get_db() as conn:
-        # Получаем базовую информацию о тестах с подсчетом вопросов и названием категории
         cursor = conn.execute("""
             SELECT q.*, 
                    c.name as category_name,
-                   COUNT(DISTINCT qr.id) as attempt_count,
-                   AVG(qr.score * 1.0 / qr.total) as avg_score,
-                   MAX(qr.score * 1.0 / qr.total) as best_score,
-                   COUNT(DISTINCT qe.id) as question_count
+                   COUNT(DISTINCT qu.id) as question_count,
+                   COALESCE(stats.attempt_count, 0) as attempt_count,
+                   stats.best_score,
+                   stats.avg_score
             FROM quizzes q
             LEFT JOIN categories c ON q.category_id = c.id
-            LEFT JOIN quiz_results qr ON q.id = qr.quiz_id
-            LEFT JOIN questions qe ON q.id = qe.quiz_id
-            GROUP BY q.id, c.name
+            LEFT JOIN questions qu ON q.id = qu.quiz_id
+            LEFT JOIN (
+                SELECT quiz_id,
+                       COUNT(*) as attempt_count,
+                       AVG(score * 1.0 / total) as avg_score,
+                       MAX(score * 1.0 / total) as best_score
+                FROM quiz_results
+                GROUP BY quiz_id
+            ) stats ON q.id = stats.quiz_id
+            GROUP BY q.id
             ORDER BY q.id
         """)
         rows = cursor.fetchall()
-        
-        # Создаем объекты Quiz с дополнительными атрибутами
-        quizzes = []
-        for row in rows:
-            quiz_dict = dict(row)
-            # Создаем базовый объект Quiz
-            quiz = Quiz(
-                id=quiz_dict['id'],
-                category_id=quiz_dict['category_id'],
-                title=quiz_dict['title'],
-                description=quiz_dict['description']
-            )
-            # Добавляем дополнительные атрибуты как свойства объекта
-            quiz.attempt_count = quiz_dict['attempt_count'] or 0
-            quiz.avg_score = quiz_dict['avg_score'] or 0.0
-            quiz.best_score = quiz_dict['best_score'] or 0.0
-            quiz.question_count = quiz_dict['question_count'] or 0
-            quiz.category_name = quiz_dict['category_name'] or ""
-            quizzes.append(quiz)
-            
-        return quizzes
+        return [Quiz(**dict(row)) for row in rows]
 
 
 def get_quizzes_by_category(category_id: int) -> List[Quiz]:
-    """Получить тесты по категории со статистикой."""
+    """Получить тесты по категории."""
     with get_db() as conn:
-        # Получаем информацию о тестах со статистикой и названием категории
-        cursor = conn.execute("""
-            SELECT q.*, 
-                   c.name as category_name,
-                   COUNT(DISTINCT qr.id) as attempt_count,
-                   AVG(qr.score * 1.0 / qr.total) as avg_score,
-                   MAX(qr.score * 1.0 / qr.total) as best_score,
-                   COUNT(DISTINCT qe.id) as question_count
-            FROM quizzes q
-            LEFT JOIN categories c ON q.category_id = c.id
-            LEFT JOIN quiz_results qr ON q.id = qr.quiz_id
-            LEFT JOIN questions qe ON q.id = qe.quiz_id
-            WHERE q.category_id = ?
-            GROUP BY q.id, c.name
-            ORDER BY q.id
-        """, (category_id,))
+        cursor = conn.execute(
+            "SELECT * FROM quizzes WHERE category_id = ? ORDER BY id",
+            (category_id,)
+        )
         rows = cursor.fetchall()
-        
-        # Создаем объекты Quiz с дополнительными атрибутами
-        quizzes = []
-        for row in rows:
-            quiz_dict = dict(row)
-            # Создаем базовый объект Quiz
-            quiz = Quiz(
-                id=quiz_dict['id'],
-                category_id=quiz_dict['category_id'],
-                title=quiz_dict['title'],
-                description=quiz_dict['description']
-            )
-            # Добавляем дополнительные атрибуты как свойства объекта
-            quiz.attempt_count = quiz_dict['attempt_count'] or 0
-            quiz.avg_score = quiz_dict['avg_score'] or 0.0
-            quiz.best_score = quiz_dict['best_score'] or 0.0
-            quiz.question_count = quiz_dict['question_count'] or 0
-            quiz.category_name = quiz_dict['category_name'] or ""
-            quizzes.append(quiz)
-            
-        return quizzes
+        return [Quiz(**dict(row)) for row in rows]
 
 
 def get_quiz_by_id(quiz_id: int) -> Optional[Quiz]:
-    """Получить тест по ID со статистикой."""
+    """Получить тест по ID."""
     with get_db() as conn:
-        # Получаем информацию о тесте со статистикой и названием категории
-        cursor = conn.execute("""
-            SELECT q.*, 
-                   c.name as category_name,
-                   COUNT(DISTINCT qr.id) as attempt_count,
-                   AVG(qr.score * 1.0 / qr.total) as avg_score,
-                   MAX(qr.score * 1.0 / qr.total) as best_score,
-                   COUNT(DISTINCT qe.id) as question_count
-            FROM quizzes q
-            LEFT JOIN categories c ON q.category_id = c.id
-            LEFT JOIN quiz_results qr ON q.id = qr.quiz_id
-            LEFT JOIN questions qe ON q.id = qe.quiz_id
-            WHERE q.id = ?
-            GROUP BY q.id, c.name
-        """, (quiz_id,))
+        cursor = conn.execute("SELECT * FROM quizzes WHERE id = ?", (quiz_id,))
         row = cursor.fetchone()
-        if row:
-            quiz_dict = dict(row)
-            # Создаем базовый объект Quiz
-            quiz = Quiz(
-                id=quiz_dict['id'],
-                category_id=quiz_dict['category_id'],
-                title=quiz_dict['title'],
-                description=quiz_dict['description']
-            )
-            # Добавляем дополнительные атрибуты как свойства объекта
-            quiz.attempt_count = quiz_dict['attempt_count'] or 0
-            quiz.avg_score = quiz_dict['avg_score'] or 0.0
-            quiz.best_score = quiz_dict['best_score'] or 0.0
-            quiz.question_count = quiz_dict['question_count'] or 0
-            quiz.category_name = quiz_dict['category_name'] or ""
-            return quiz
-        return None
+        return Quiz(**dict(row)) if row else None
 
 
 def create_quiz(category_id: Optional[int], title: str, description: str = "") -> bool:
@@ -288,75 +154,82 @@ def get_questions_by_quiz(quiz_id: int) -> List[Question]:
             (quiz_id,)
         )
         rows = cursor.fetchall()
-        return [Question(**dict(row)) for row in rows]
-
-
-def get_question_by_id(question_id: int) -> Optional[Question]:
-    """Получить вопрос по ID."""
-    with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
-        row = cursor.fetchone()
-        return Question(**dict(row)) if row else None
+        questions = []
+        for row in rows:
+            q_dict = dict(row)
+            question = Question(**q_dict)
+            
+            # Загружаем дополнительные данные для разных типов вопросов
+            if question.question_type == "matching":
+                cursor.execute(
+                    "SELECT left_item, right_item, pair_order FROM matching_pairs WHERE question_id = ? ORDER BY pair_order",
+                    (question.id,)
+                )
+                pairs = cursor.fetchall()
+                question.matching_pairs = [{"left": p[0], "right": p[1], "order": p[2]} for p in pairs]
+            elif question.question_type == "ordering":
+                cursor.execute(
+                    "SELECT item_text, correct_order FROM ordering_items WHERE question_id = ? ORDER BY correct_order",
+                    (question.id,)
+                )
+                items = cursor.fetchall()
+                question.ordering_items = [{"text": i[0], "order": i[1]} for i in items]
+            
+            questions.append(question)
+        
+        return questions
 
 
 def create_question(
     quiz_id: int,
     question_text: str,
-    option_a: str,
-    option_b: str,
-    option_c: str,
-    option_d: str,
-    correct_option: str,
+    option_a: str = "",
+    option_b: str = "",
+    option_c: str = "",
+    option_d: str = "",
+    correct_option: str = "",
     explanation: str = "",
     order_num: int = 0,
-    question_type: str = "single_choice"
+    question_type: str = "single_choice",
+    matching_pairs: Optional[List[dict]] = None,
+    ordering_items: Optional[List[dict]] = None,
+    expected_answer: Optional[str] = None
 ) -> bool:
     """Создать новый вопрос."""
-    if correct_option not in ("A", "B", "C", "D"):
-        return False
-
+    # Для single_choice и multiple_choice проверяем правильность опции
+    if question_type in ("single_choice", "multiple_choice"):
+        if correct_option not in ("A", "B", "C", "D", ""):
+            return False
+    
     try:
         with get_db() as conn:
-            conn.execute(
-                """INSERT INTO questions
-                   (quiz_id, question_text, option_a, option_b, option_c, option_d,
-                    correct_option, explanation, order_num, question_type)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO questions 
+                   (quiz_id, question_text, option_a, option_b, option_c, option_d, 
+                    correct_option, explanation, order_num, question_type, expected_answer) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (quiz_id, question_text, option_a, option_b, option_c, option_d,
-                 correct_option, explanation, order_num, question_type)
+                 correct_option, explanation, order_num, question_type, expected_answer)
             )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def update_question(question_id: int, quiz_id: int, question_text: str, option_a: str, option_b: str, option_c: str, option_d: str, correct_option: str, explanation: str, order_num: int) -> bool:
-    """Обновить вопрос."""
-    if correct_option not in ("A", "B", "C", "D"):
-        return False
-
-    try:
-        with get_db() as conn:
-            conn.execute(
-                """UPDATE questions
-                   SET quiz_id = ?, question_text = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?,
-                       correct_option = ?, explanation = ?, order_num = ?
-                   WHERE id = ?""",
-                (quiz_id, question_text, option_a, option_b, option_c, option_d,
-                 correct_option, explanation, order_num, question_id)
-            )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def delete_question(question_id: int) -> bool:
-    """Удалить вопрос."""
-    try:
-        with get_db() as conn:
-            conn.execute("DELETE FROM questions WHERE id = ?", (question_id,))
+            question_id = cursor.lastrowid
+            
+            # Если это вопрос на сопоставление, добавляем пары
+            if question_type == "matching" and matching_pairs:
+                for pair in matching_pairs:
+                    cursor.execute(
+                        "INSERT INTO matching_pairs (question_id, left_item, right_item, pair_order) VALUES (?, ?, ?, ?)",
+                        (question_id, pair["left"], pair["right"], pair.get("order", 0))
+                    )
+            
+            # Если это вопрос на упорядочивание, добавляем элементы
+            elif question_type == "ordering" and ordering_items:
+                for item in ordering_items:
+                    cursor.execute(
+                        "INSERT INTO ordering_items (question_id, item_text, correct_order) VALUES (?, ?, ?)",
+                        (question_id, item["text"], item["order"])
+                    )
+            
             conn.commit()
         return True
     except Exception:
@@ -369,7 +242,7 @@ def save_quiz_result(quiz_id: int, score: int, total: int, user_id: Optional[int
     """Сохранить результат теста."""
     result_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
-
+    
     with get_db() as conn:
         conn.execute(
             "INSERT INTO quiz_results (id, quiz_id, score, total, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -377,17 +250,6 @@ def save_quiz_result(quiz_id: int, score: int, total: int, user_id: Optional[int
         )
         conn.commit()
     return result_id
-
-
-def get_quiz_result_by_id(result_id: str) -> Optional[QuizResult]:
-    """Получить результат теста по ID."""
-    with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM quiz_results WHERE id = ?",
-            (result_id,)
-        )
-        row = cursor.fetchone()
-        return QuizResult(**dict(row)) if row else None
 
 
 def get_quiz_results(quiz_id: int) -> List[QuizResult]:
@@ -420,61 +282,6 @@ def search_glossary(query: str) -> List[GlossaryTerm]:
         )
         rows = cursor.fetchall()
         return [GlossaryTerm(**dict(row)) for row in rows]
-
-
-def get_glossary_by_letter(letter: str) -> List[GlossaryTerm]:
-    """Получить термины словаря по букве."""
-    with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM glossary WHERE letter = ? ORDER BY term", (letter.upper(),))
-        rows = cursor.fetchall()
-        return [GlossaryTerm(**dict(row)) for row in rows]
-
-
-def get_glossary_by_id(term_id: int) -> Optional[GlossaryTerm]:
-    """Получить термин словаря по ID."""
-    with get_db() as conn:
-        cursor = conn.execute("SELECT * FROM glossary WHERE id = ?", (term_id,))
-        row = cursor.fetchone()
-        return GlossaryTerm(**dict(row)) if row else None
-
-
-def create_glossary_term(term: str, definition: str, letter: str) -> bool:
-    """Создать новый термин словаря."""
-    try:
-        with get_db() as conn:
-            conn.execute(
-                "INSERT INTO glossary (term, definition, letter) VALUES (?, ?, ?)",
-                (term, definition, letter.upper())
-            )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def update_glossary_term(term_id: int, term: str, definition: str, letter: str) -> bool:
-    """Обновить термин словаря."""
-    try:
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE glossary SET term = ?, definition = ?, letter = ? WHERE id = ?",
-                (term, definition, letter.upper(), term_id)
-            )
-            conn.commit()
-        return True
-    except Exception:
-        return False
-
-
-def delete_glossary_term(term_id: int) -> bool:
-    """Удалить термин словаря."""
-    try:
-        with get_db() as conn:
-            conn.execute("DELETE FROM glossary WHERE id = ?", (term_id,))
-            conn.commit()
-        return True
-    except Exception:
-        return False
 
 
 # ====== ОТЗЫВЫ ======
