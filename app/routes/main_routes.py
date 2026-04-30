@@ -71,6 +71,14 @@ def _process_question(question, form_data):
             return 1, user_order_str
         return 0, user_order_str
 
+    elif question.question_type == "text_input":
+        # Для текстового ввода - сравниваем строку (без учета регистра и пробелов по краям)
+        user_answer = all_values[0].strip().lower() if all_values else ""
+        expected = (question.expected_answer or "").strip().lower()
+        if user_answer == expected:
+            return 1, all_values[0] if all_values else ""  # Возвращаем оригинальный ответ для отображения
+        return 0, all_values[0] if all_values else ""
+
     else:
         # Для одиночного выбора - просто сравниваем строки
         user_answer = all_values[0] if all_values else ""
@@ -158,6 +166,21 @@ def _build_question_detail(question, user_answer_raw):
             "explanation": question.explanation,
             "question_type": question.question_type,
             "ordering_results": ordering_results
+        }
+
+    elif question.question_type == "text_input":
+        # Для текстового ввода
+        expected = (question.expected_answer or "").strip().lower()
+        user_answer_stripped = user_answer_raw.strip().lower()
+        is_correct = user_answer_stripped == expected
+
+        return {
+            "question": question.question_text,
+            "expected_answer": question.expected_answer,
+            "your_answer": user_answer_raw,
+            "is_correct": is_correct,
+            "explanation": question.explanation,
+            "question_type": question.question_type
         }
 
     else:

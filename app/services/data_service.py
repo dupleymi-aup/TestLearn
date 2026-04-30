@@ -204,20 +204,23 @@ def create_question(
     if question_type in ("single_choice", "multiple_choice"):
         if correct_option not in ("A", "B", "C", "D", ""):
             return False
-    
+    # Для text_input, expected_answer должен быть предоставлен
+    if question_type == "text_input" and not expected_answer:
+        return False
+
     try:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """INSERT INTO questions 
-                   (quiz_id, question_text, option_a, option_b, option_c, option_d, 
-                    correct_option, explanation, order_num, question_type, expected_answer) 
+                """INSERT INTO questions
+                   (quiz_id, question_text, option_a, option_b, option_c, option_d,
+                    correct_option, explanation, order_num, question_type, expected_answer)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (quiz_id, question_text, option_a, option_b, option_c, option_d,
                  correct_option, explanation, order_num, question_type, expected_answer)
             )
             question_id = cursor.lastrowid
-            
+
             # Если это вопрос на сопоставление, добавляем пары
             if question_type == "matching" and matching_pairs:
                 for pair in matching_pairs:
@@ -225,7 +228,7 @@ def create_question(
                         "INSERT INTO matching_pairs (question_id, left_item, right_item, pair_order) VALUES (?, ?, ?, ?)",
                         (question_id, pair["left"], pair["right"], pair.get("order", 0))
                     )
-            
+
             # Если это вопрос на упорядочивание, добавляем элементы
             elif question_type == "ordering" and ordering_items:
                 for item in ordering_items:
@@ -233,7 +236,7 @@ def create_question(
                         "INSERT INTO ordering_items (question_id, item_text, correct_order) VALUES (?, ?, ?)",
                         (question_id, item["text"], item["order"])
                     )
-            
+
             conn.commit()
         return True
     except Exception:
