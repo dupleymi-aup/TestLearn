@@ -14,10 +14,19 @@ from app.deps.auth import (
 )
 from app.services.data_service import (
     create_category, create_topic, create_quiz, create_question,
-    get_all_categories, get_all_quizzes, get_all_feedback
+    get_all_categories, get_all_quizzes, get_all_feedback,
+    get_topics_by_category
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _add_topic_count_to_categories(categories):
+    """Add topic_count attribute to each category."""
+    for category in categories:
+        topics = get_topics_by_category(category.id)
+        category.topic_count = len(topics)
+    return categories
 
 
 @router.get("", response_class=HTMLResponse)
@@ -26,11 +35,7 @@ async def admin_dashboard(request: Request, admin: bool = Depends(get_current_ad
     """Панель администратора."""
     templates = request.app.state.templates
 
-    categories = get_all_categories()
-    # Add topic_count to each category
-    for category in categories:
-        topics = get_topics_by_category(category.id)
-        category.topic_count = len(topics)
+    categories = _add_topic_count_to_categories(get_all_categories())
     quizzes = get_all_quizzes()
     feedbacks = get_all_feedback()
 

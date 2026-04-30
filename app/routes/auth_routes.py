@@ -2,6 +2,7 @@
 Маршруты аутентификации пользователей
 """
 
+import secrets
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from datetime import datetime
@@ -45,6 +46,14 @@ async def login_page(request: Request):
     })
 
 
+def _get_csrf_error(request: Request, form_csrf_token: str) -> str | None:
+    """Validate CSRF token and return error message if invalid, else None."""
+    stored_token = request.session.get("csrf_token")
+    if not form_csrf_token or not stored_token or not secrets.compare_digest(form_csrf_token, stored_token):
+        return "Ошибка безопасности: неверный CSRF токен. Пожалуйста, обновите страницу и попробуйте снова."
+    return None
+
+
 @router.post("/login", response_class=HTMLResponse)
 async def login_submit(request: Request):
     """Обработка входа."""
@@ -52,12 +61,11 @@ async def login_submit(request: Request):
     form = await request.form()
 
     # Валидация CSRF токена
-    csrf_token = form.get("csrf_token")
-    stored_token = request.session.get("csrf_token")
-    if not csrf_token or not stored_token or not secrets.compare_digest(csrf_token, stored_token):
+    csrf_error = _get_csrf_error(request, form.get("csrf_token"))
+    if csrf_error:
         return templates.TemplateResponse(request, "login.html", {
             "csrf_token": generate_csrf_token(),
-            "error": "Ошибка безопасности: неверный CSRF токен. Пожалуйста, обновите страницу и попробуйте снова."
+            "error": csrf_error
         })
 
     username = form.get("username", "").strip()
