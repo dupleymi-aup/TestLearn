@@ -83,38 +83,10 @@ def create_topic(category_id: int, title: str, content: str, order_num: int = 0)
 
 # ====== ТЕСТЫ ======
 
-def get_all_quizzes() -> List[Quiz]:
-    """Получить все тесты с дополнительной статистикой."""
+def _get_quizzes_base(category_id: Optional[int] = None) -> List[Quiz]:
+    """Базовый запрос для получения тестов со статистикой."""
     with get_db() as conn:
-        cursor = conn.execute("""
-            SELECT q.*, 
-                   c.name as category_name,
-                   COUNT(DISTINCT qu.id) as question_count,
-                   COALESCE(stats.attempt_count, 0) as attempt_count,
-                   stats.best_score,
-                   stats.avg_score
-            FROM quizzes q
-            LEFT JOIN categories c ON q.category_id = c.id
-            LEFT JOIN questions qu ON q.id = qu.quiz_id
-            LEFT JOIN (
-                SELECT quiz_id,
-                       COUNT(*) as attempt_count,
-                       AVG(score * 1.0 / total) as avg_score,
-                       MAX(score * 1.0 / total) as best_score
-                FROM quiz_results
-                GROUP BY quiz_id
-            ) stats ON q.id = stats.quiz_id
-            GROUP BY q.id
-            ORDER BY q.id
-        """)
-        rows = cursor.fetchall()
-        return [Quiz(**dict(row)) for row in rows]
-
-
-def get_quizzes_by_category(category_id: int) -> List[Quiz]:
-    """Получить тесты по категории со статистикой."""
-    with get_db() as conn:
-        cursor = conn.execute("""
+        base_query = """
             SELECT q.*,
                    c.name as category_name,
                    COUNT(DISTINCT qu.id) as question_count,
@@ -132,12 +104,26 @@ def get_quizzes_by_category(category_id: int) -> List[Quiz]:
                 FROM quiz_results
                 GROUP BY quiz_id
             ) stats ON q.id = stats.quiz_id
-            WHERE q.category_id = ?
-            GROUP BY q.id
-            ORDER BY q.id
-        """, (category_id,))
+        """
+        if category_id is not None:
+            query = base_query + " WHERE q.category_id = ? GROUP BY q.id ORDER BY q.id"
+            params = (category_id,)
+        else:
+            query = base_query + " GROUP BY q.id ORDER BY q.id"
+            params = ()
+        cursor = conn.execute(query, params)
         rows = cursor.fetchall()
         return [Quiz(**dict(row)) for row in rows]
+
+
+def get_all_quizzes() -> List[Quiz]:
+    """Получить все тесты с дополнительной статистикой."""
+    return _get_quizzes_base()
+
+
+def get_quizzes_by_category(category_id: int) -> List[Quiz]:
+    """Получить тесты по категории со статистикой."""
+    return _get_quizzes_base(category_id)
 
 
 def get_quiz_by_id(quiz_id: int) -> Optional[Quiz]:
