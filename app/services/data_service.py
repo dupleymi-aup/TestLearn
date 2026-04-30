@@ -112,12 +112,30 @@ def get_all_quizzes() -> List[Quiz]:
 
 
 def get_quizzes_by_category(category_id: int) -> List[Quiz]:
-    """Получить тесты по категории."""
+    """Получить тесты по категории со статистикой."""
     with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT * FROM quizzes WHERE category_id = ? ORDER BY id",
-            (category_id,)
-        )
+        cursor = conn.execute("""
+            SELECT q.*,
+                   c.name as category_name,
+                   COUNT(DISTINCT qu.id) as question_count,
+                   COALESCE(stats.attempt_count, 0) as attempt_count,
+                   stats.best_score,
+                   stats.avg_score
+            FROM quizzes q
+            LEFT JOIN categories c ON q.category_id = c.id
+            LEFT JOIN questions qu ON q.id = qu.quiz_id
+            LEFT JOIN (
+                SELECT quiz_id,
+                       COUNT(*) as attempt_count,
+                       AVG(score * 1.0 / total) as avg_score,
+                       MAX(score * 1.0 / total) as best_score
+                FROM quiz_results
+                GROUP BY quiz_id
+            ) stats ON q.id = stats.quiz_id
+            WHERE q.category_id = ?
+            GROUP BY q.id
+            ORDER BY q.id
+        """, (category_id,))
         rows = cursor.fetchall()
         return [Quiz(**dict(row)) for row in rows]
 
