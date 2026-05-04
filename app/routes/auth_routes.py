@@ -1,7 +1,8 @@
 """ Маршруты аутентификации пользователей """
 import secrets
+from typing import Optional
 from fastapi import APIRouter, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from datetime import datetime
 from app.deps.auth import (
     hash_password, verify_password,
@@ -18,7 +19,7 @@ from app.services.user_service import get_current_user_from_session
 router = APIRouter()
 
 
-def _get_csrf_error(request: Request, form_csrf_token: str) -> str | None:
+def _get_csrf_error(request: Request, form_csrf_token: str) -> Optional[str]:
     """Validate CSRF token and return error message if invalid, else None."""
     stored_token = request.session.get("csrf_token")
     if not form_csrf_token or not stored_token or not secrets.compare_digest(form_csrf_token, stored_token):

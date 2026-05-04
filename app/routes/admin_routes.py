@@ -5,8 +5,6 @@ import secrets
 from app.deps.auth import (
     get_current_admin,
     create_admin_session,
-    verify_password,
-    get_admin_password_hash,
     generate_csrf_token
 )
 from app.services.data_service import (

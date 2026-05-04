@@ -1,7 +1,6 @@
 """ Основные маршруты приложения """
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from app.services.data_service import (
     get_all_categories, get_category_by_slug,
     get_topics_by_category, get_topic_by_id,
@@ -11,16 +10,19 @@ from app.services.data_service import (
     create_feedback, get_user_stats,
     add_xp, check_achievements, get_platform_stats
 )
-from app.database.db import get_db, DB_NAME
+from app.database.db import get_db
 from app.deps.auth import generate_csrf_token, sanitize_input
 from app.services.user_service import get_current_user_from_session
 
 router = APIRouter()
 
 
-def setup_templates(static_path: str, templates_path: str) -> Jinja2Templates:
-    """Настроить шаблоны."""
-    return Jinja2Templates(directory=templates_path)
+def _add_topic_count(categories):
+    """Добавить topic_count к каждой категории."""
+    for cat in categories:
+        topics = get_topics_by_category(cat.id)
+        cat.topic_count = len(topics)
+    return categories
 
 
 def _process_question(question, form_data):
@@ -168,15 +170,30 @@ def _build_question_detail(question, user_answer_raw):
 async def index(request: Request):
     """Главная страница."""
     templates = request.app.state.templates
-    categories = get_all_categories()
+    categories = _add_topic_count(get_all_categories())
     stats = get_platform_stats()
     user = get_current_user_from_session(request)
     user_stats = None
+    progress = None
     if user:
         user_stats = get_user_stats(user.id)
+        progress = {
+            "topics_read": 0,
+            "quizzes_passed": user_stats["quizzes_passed"],
+            "total_score": user_stats["xp"]
+        }
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(DISTINCT topic_id) FROM read_topics WHERE session_id = ?",
+                (str(user.id),)
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                progress["topics_read"] = row[0]
     return templates.TemplateResponse(request, "index.html", {
         "categories": categories, "stats": stats,
         "user": user, "user_stats": user_stats,
+        "progress": progress,
         "csrf_token": generate_csrf_token()
     })
 
@@ -197,20 +214,125 @@ async def category_page(request: Request, slug: str):
     })
 
 
-@router.get("/theory/{topic_id}", response_class=HTMLResponse)
-async def theory_page(request: Request, topic_id: int):
-    """Страница теории."""
+@router.get("/topic/{topic_id}", response_class=HTMLResponse)
+async def topic_page(request: Request, topic_id: int):
+    """Страница отдельной темы."""
     templates = request.app.state.templates
     topic = get_topic_by_id(topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Тема не найдена")
     user = get_current_user_from_session(request)
-    total_topics = len(get_topics_by_category(topic.category_id))
-    topics_read = 1
-    return templates.TemplateResponse(request, "theory.html", {
-        "topic": topic, "user": user,
-        "csrf_token": generate_csrf_token(),
-        "total_topics": total_topics, "topics_read": topics_read
+    category = get_category_by_id(topic.category_id)
+    # Отслеживание прочитанной темы
+    if user:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO read_topics (session_id, topic_id, read_at) VALUES (?, ?, ?)",
+                (str(user.id), topic_id, __import__("datetime").datetime.now().isoformat())
+            )
+            conn.commit()
+    is_bookmarked = False
+    if user:
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT 1 FROM bookmarks WHERE session_id = ? AND topic_id = ?",
+                (str(user.id), topic_id)
+            )
+            is_bookmarked = cursor.fetchone() is not None
+    return templates.TemplateResponse(request, "topic.html", {
+        "topic": topic, "user": user, "category": category,
+        "is_bookmarked": is_bookmarked,
+        "csrf_token": generate_csrf_token()
+    })
+
+
+@router.post("/bookmark/{topic_id}", response_class=HTMLResponse)
+async def toggle_bookmark(request: Request, topic_id: int):
+    """Добавить/убрать закладку."""
+    from datetime import datetime
+    user = get_current_user_from_session(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    topic = get_topic_by_id(topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Тема не найдена")
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT 1 FROM bookmarks WHERE session_id = ? AND topic_id = ?",
+            (str(user.id), topic_id)
+        )
+        if cursor.fetchone():
+            conn.execute(
+                "DELETE FROM bookmarks WHERE session_id = ? AND topic_id = ?",
+                (str(user.id), topic_id)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO bookmarks (session_id, topic_id, bookmarked_at) VALUES (?, ?, ?)",
+                (str(user.id), topic_id, datetime.now().isoformat())
+            )
+        conn.commit()
+    return RedirectResponse(url=f"/topic/{topic_id}", status_code=303)
+
+
+@router.get("/theory", response_class=HTMLResponse)
+async def theory_list_page(request: Request, category_id: int = None, search: str = ""):
+    """Страница списка всех тем теории."""
+    templates = request.app.state.templates
+    categories = get_all_categories()
+    user = get_current_user_from_session(request)
+
+    # Строим темы по категориям
+    topics_by_category = {}
+    all_topic_titles = []
+    for category in categories:
+        cat_topics = get_topics_by_category(category.id)
+        topics_by_category[category.id] = cat_topics
+        for t in cat_topics:
+            all_topic_titles.append(t.title)
+
+    # Фильтрация по поиску
+    if search:
+        search_lower = search.lower()
+        filtered = {}
+        for cat_id, cat_topics in topics_by_category.items():
+            matched = [t for t in cat_topics
+                       if search_lower in t.title.lower() or search_lower in t.content.lower()]
+            if matched:
+                filtered[cat_id] = matched
+        topics_by_category = filtered
+
+    # Фильтрация по категории
+    if category_id:
+        active_category_id = category_id
+        if category_id in topics_by_category:
+            topics_by_category = {category_id: topics_by_category[category_id]}
+        else:
+            topics_by_category = {}
+    else:
+        active_category_id = None
+
+    # Считаем прочитанные темы
+    topics_read = 0
+    total_topics = sum(len(v) for v in topics_by_category.values())
+    if user:
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(DISTINCT topic_id) FROM read_topics WHERE session_id = ?",
+                (str(user.id),)
+            )
+            row = cursor.fetchone()
+            topics_read = row[0] if row else 0
+
+    return templates.TemplateResponse(request, "theory_list.html", {
+        "categories": categories,
+        "topics_by_category": topics_by_category,
+        "active_category_id": active_category_id,
+        "search_query": search,
+        "all_topic_titles": all_topic_titles,
+        "topics_read": topics_read,
+        "total_topics": total_topics,
+        "user": user, "csrf_token": generate_csrf_token()
     })
 
 
@@ -278,7 +400,6 @@ async def quiz_result(request: Request, quiz_id: int, result_id: str):
         raise HTTPException(status_code=404, detail="Тест не найден")
     questions = get_questions_by_quiz(quiz_id)
     user = get_current_user_from_session(request)
-    # Используем модульную функцию _build_question_detail (без дублирования)
     results_detail = []
     for question in questions:
         user_answer_raw = request.query_params.get(f"q{question.id}", "")
@@ -289,6 +410,18 @@ async def quiz_result(request: Request, quiz_id: int, result_id: str):
         "score": result["score"], "total": result["total"],
         "percentage": percentage, "results": results_detail,
         "user": user, "csrf_token": generate_csrf_token()
+    })
+
+
+@router.get("/quiz", response_class=HTMLResponse)
+async def quiz_list_page(request: Request):
+    """Страница списка всех тестов."""
+    templates = request.app.state.templates
+    quizzes = get_all_quizzes()
+    user = get_current_user_from_session(request)
+    return templates.TemplateResponse(request, "quiz_list.html", {
+        "quizzes": quizzes, "user": user,
+        "csrf_token": generate_csrf_token()
     })
 
 
@@ -312,6 +445,7 @@ async def feedback_form(request: Request):
     """Форма обратной связи."""
     templates = request.app.state.templates
     user = get_current_user_from_session(request)
+    success = request.query_params.get("success", "")
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT AVG(rating) FROM feedback WHERE rating > 0")
@@ -331,7 +465,7 @@ async def feedback_form(request: Request):
     return templates.TemplateResponse(request, "feedback.html", {
         "user": user, "csrf_token": generate_csrf_token(),
         "avg_rating": avg_rating, "total_feedback": total_feedback,
-        "recent_feedback": recent_feedback
+        "recent_feedback": recent_feedback, "success": success
     })
 
 
@@ -427,41 +561,6 @@ async def profile_page(request: Request):
     })
 
 
-@router.get("/theory", response_class=HTMLResponse)
-async def theory_list_page(request: Request):
-    """Страница списка всех тем теории."""
-    templates = request.app.state.templates
-    categories = get_all_categories()
-    user = get_current_user_from_session(request)
-    all_topics = []
-    for category in categories:
-        topics = get_topics_by_category(category.id)
-        for topic in topics:
-            all_topics.append({
-                'id': topic.id, 'title': topic.title,
-                'content': topic.content,
-                'category_name': category.name,
-                'category_slug': category.slug,
-                'created_at': topic.order_num
-            })
-    return templates.TemplateResponse(request, "theory_list.html", {
-        "topics": all_topics, "categories": categories,
-        "user": user, "csrf_token": generate_csrf_token()
-    })
-
-
-@router.get("/quiz", response_class=HTMLResponse)
-async def quiz_list_page(request: Request):
-    """Страница списка всех тестов."""
-    templates = request.app.state.templates
-    quizzes = get_all_quizzes()
-    user = get_current_user_from_session(request)
-    return templates.TemplateResponse(request, "quiz_list.html", {
-        "quizzes": quizzes, "user": user,
-        "csrf_token": generate_csrf_token()
-    })
-
-
 @router.get("/bookmarks", response_class=HTMLResponse)
 async def bookmarks_page(request: Request):
     """Страница закладок пользователя."""
@@ -473,18 +572,20 @@ async def bookmarks_page(request: Request):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT b.topic_id, b.bookmarked_at,
-                   t.title as topic_title
+                   t.title as topic_title,
+                   c.name as category_name
             FROM bookmarks b
             JOIN topics t ON b.topic_id = t.id
+            LEFT JOIN categories c ON t.category_id = c.id
             WHERE b.session_id = ?
             ORDER BY b.bookmarked_at DESC
         """, (str(user.id),))
         rows = cursor.fetchall()
-        bookmarks = [
-            {"topic_id": r[0], "bookmarked_at": r[1], "topic_title": r[2]}
+        bookmarked_topics = [
+            {"id": r[0], "title": r[2], "category_name": r[3]}
             for r in rows
         ]
     return templates.TemplateResponse(request, "bookmarks.html", {
-        "bookmarks": bookmarks, "user": user,
+        "bookmarked_topics": bookmarked_topics, "user": user,
         "csrf_token": generate_csrf_token()
     })
