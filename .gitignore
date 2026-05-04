@@ -1,9 +1,10 @@
-```
+``` 
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
 
 # Database
 testlearn.db
@@ -20,8 +21,11 @@ testlearn.db
 *.tmp
 *.swp
 *~
+pid.txt
+cookies.txt
 
-# Coverage
+# Testing
+.pytest_cache/
 .coverage
 htmlcov/
 coverage/

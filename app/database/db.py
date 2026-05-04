@@ -232,3 +232,25 @@ def init_database():
         """)
 
         conn.commit()
+
+
+def seed_achievements():
+    """Заполнить таблицу достижений начальными данными."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM achievements")
+        if cursor.fetchone()[0] > 0:
+            return
+        achievements = [
+            ("Первые шаги", "Пройдите первый тест", "🎯", "quizzes_passed", 1),
+            ("Студент", "Достигните 3-го уровня", "⭐", "level", 3),
+            ("Знаток", "Пройдите 5 тестов", "📝", "quizzes_passed", 5),
+            ("Мастер", "Достигните 5-го уровня", "🏆", "level", 5),
+            ("Эксперт", "Пройдите 10 тестов", "🎓", "quizzes_passed", 10),
+            ("Виртуоз", "Достигните 10-го уровня", "💎", "level", 10),
+        ]
+        for name, desc, icon, req_type, req_val in achievements:
+            conn.execute(
+                "INSERT INTO achievements (name, description, icon, requirement_type, requirement_value) VALUES (?, ?, ?, ?, ?)",
+                (name, desc, icon, req_type, req_val)
+            )
+        conn.commit()

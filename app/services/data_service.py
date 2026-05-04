@@ -1,11 +1,7 @@
-"""
-Сервисы для работы с данными
-"""
-
+""" Сервисы для работы с данными """
 import uuid
 from datetime import datetime
 from typing import Optional, List, Tuple
-
 from app.database.db import get_db
 from app.models.schemas import (
     Category, Topic, Quiz, Question, QuizResult,
@@ -32,6 +28,14 @@ def get_category_by_slug(slug: str) -> Optional[Category]:
         return Category(**dict(row)) if row else None
 
 
+def get_category_by_id(category_id: int) -> Optional[Category]:
+    """Получить категорию по ID."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM categories WHERE id = ?", (category_id,))
+        row = cursor.fetchone()
+        return Category(**dict(row)) if row else None
+
+
 def create_category(name: str, slug: str, description: str = "", icon: str = "check-circle") -> bool:
     """Создать новую категорию."""
     try:
@@ -41,7 +45,32 @@ def create_category(name: str, slug: str, description: str = "", icon: str = "ch
                 (name, slug, description, icon)
             )
             conn.commit()
-        return True
+            return True
+    except Exception:
+        return False
+
+
+def update_category(category_id: int, name: str, slug: str, description: str = "", icon: str = "check-circle") -> bool:
+    """Обновить категорию."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE categories SET name = ?, slug = ?, description = ?, icon = ? WHERE id = ?",
+                (name, slug, description, icon, category_id)
+            )
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+def delete_category(category_id: int) -> bool:
+    """Удалить категорию."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+            conn.commit()
+            return True
     except Exception:
         return False
 
@@ -76,7 +105,32 @@ def create_topic(category_id: int, title: str, content: str, order_num: int = 0)
                 (category_id, title, content, order_num)
             )
             conn.commit()
-        return True
+            return True
+    except Exception:
+        return False
+
+
+def update_topic(topic_id: int, category_id: int, title: str, content: str, order_num: int = 0) -> bool:
+    """Обновить тему."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE topics SET category_id = ?, title = ?, content = ?, order_num = ? WHERE id = ?",
+                (category_id, title, content, order_num, topic_id)
+            )
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+def delete_topic(topic_id: int) -> bool:
+    """Удалить тему."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+            conn.commit()
+            return True
     except Exception:
         return False
 
@@ -87,12 +141,10 @@ def _get_quizzes_base(category_id: Optional[int] = None) -> List[Quiz]:
     """Базовый запрос для получения тестов со статистикой."""
     with get_db() as conn:
         base_query = """
-            SELECT q.*,
-                   c.name as category_name,
+            SELECT q.*, c.name as category_name,
                    COUNT(DISTINCT qu.id) as question_count,
                    COALESCE(stats.attempt_count, 0) as attempt_count,
-                   stats.best_score,
-                   stats.avg_score
+                   stats.best_score, stats.avg_score
             FROM quizzes q
             LEFT JOIN categories c ON q.category_id = c.id
             LEFT JOIN questions qu ON q.id = qu.quiz_id
@@ -143,7 +195,7 @@ def create_quiz(category_id: Optional[int], title: str, description: str = "") -
                 (category_id, title, description)
             )
             conn.commit()
-        return True
+            return True
     except Exception:
         return False
 
@@ -162,7 +214,6 @@ def get_questions_by_quiz(quiz_id: int) -> List[Question]:
         for row in rows:
             q_dict = dict(row)
             question = Question(**q_dict)
-            
             # Загружаем дополнительные данные для разных типов вопросов
             if question.question_type == "matching":
                 cursor.execute(
@@ -178,36 +229,53 @@ def get_questions_by_quiz(quiz_id: int) -> List[Question]:
                 )
                 items = cursor.fetchall()
                 question.ordering_items = [{"text": i[0], "order": i[1]} for i in items]
-            
             questions.append(question)
-        
         return questions
 
 
+def get_question_by_id(question_id: int) -> Optional[Question]:
+    """Получить вопрос по ID."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        question = Question(**dict(row))
+        if question.question_type == "matching":
+            cursor.execute(
+                "SELECT left_item, right_item, pair_order FROM matching_pairs WHERE question_id = ? ORDER BY pair_order",
+                (question.id,)
+            )
+            pairs = cursor.fetchall()
+            question.matching_pairs = [{"left": p[0], "right": p[1], "order": p[2]} for p in pairs]
+        elif question.question_type == "ordering":
+            cursor.execute(
+                "SELECT item_text, correct_order FROM ordering_items WHERE question_id = ? ORDER BY correct_order",
+                (question.id,)
+            )
+            items = cursor.fetchall()
+            question.ordering_items = [{"text": i[0], "order": i[1]} for i in items]
+        return question
+
+
 def create_question(
-    quiz_id: int,
-    question_text: str,
-    option_a: str = "",
-    option_b: str = "",
-    option_c: str = "",
-    option_d: str = "",
-    correct_option: str = "",
-    explanation: str = "",
-    order_num: int = 0,
-    question_type: str = "single_choice",
+    quiz_id: int, question_text: str, option_a: str = "", option_b: str = "",
+    option_c: str = "", option_d: str = "", correct_option: str = "",
+    explanation: str = "", order_num: int = 0, question_type: str = "single_choice",
     matching_pairs: Optional[List[dict]] = None,
     ordering_items: Optional[List[dict]] = None,
     expected_answer: Optional[str] = None
 ) -> bool:
     """Создать новый вопрос."""
-    # Для single_choice и multiple_choice проверяем правильность опции
-    if question_type in ("single_choice", "multiple_choice"):
+    if question_type in ("single_choice",):
         if correct_option not in ("A", "B", "C", "D", ""):
             return False
-    # Для text_input, expected_answer должен быть предоставлен
+    elif question_type == "multiple_choice":
+        for opt in correct_option.split(","):
+            if opt.strip() not in ("A", "B", "C", "D", ""):
+                return False
     if question_type == "text_input" and not expected_answer:
         return False
-
     try:
         with get_db() as conn:
             cursor = conn.cursor()
@@ -220,25 +288,51 @@ def create_question(
                  correct_option, explanation, order_num, question_type, expected_answer)
             )
             question_id = cursor.lastrowid
-
-            # Если это вопрос на сопоставление, добавляем пары
             if question_type == "matching" and matching_pairs:
                 for pair in matching_pairs:
                     cursor.execute(
                         "INSERT INTO matching_pairs (question_id, left_item, right_item, pair_order) VALUES (?, ?, ?, ?)",
                         (question_id, pair["left"], pair["right"], pair.get("order", 0))
                     )
-
-            # Если это вопрос на упорядочивание, добавляем элементы
             elif question_type == "ordering" and ordering_items:
                 for item in ordering_items:
                     cursor.execute(
                         "INSERT INTO ordering_items (question_id, item_text, correct_order) VALUES (?, ?, ?)",
                         (question_id, item["text"], item["order"])
                     )
-
             conn.commit()
-        return True
+            return True
+    except Exception:
+        return False
+
+
+def update_question(question_id: int, quiz_id: int, question_text: str,
+                    option_a: str, option_b: str, option_c: str, option_d: str,
+                    correct_option: str, explanation: str = "", order_num: int = 0) -> bool:
+    """Обновить вопрос."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                """UPDATE questions SET quiz_id = ?, question_text = ?,
+                   option_a = ?, option_b = ?, option_c = ?, option_d = ?,
+                   correct_option = ?, explanation = ?, order_num = ?
+                   WHERE id = ?""",
+                (quiz_id, question_text, option_a, option_b, option_c, option_d,
+                 correct_option, explanation, order_num, question_id)
+            )
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+def delete_question(question_id: int) -> bool:
+    """Удалить вопрос."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM questions WHERE id = ?", (question_id,))
+            conn.commit()
+            return True
     except Exception:
         return False
 
@@ -249,7 +343,6 @@ def save_quiz_result(quiz_id: int, score: int, total: int, user_id: Optional[int
     """Сохранить результат теста."""
     result_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
-    
     with get_db() as conn:
         conn.execute(
             "INSERT INTO quiz_results (id, quiz_id, score, total, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -291,13 +384,70 @@ def search_glossary(query: str) -> List[GlossaryTerm]:
         return [GlossaryTerm(**dict(row)) for row in rows]
 
 
+def get_glossary_by_letter(letter: str) -> List[GlossaryTerm]:
+    """Получить термины по букве."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM glossary WHERE letter = ? ORDER BY term",
+            (letter.upper(),)
+        )
+        rows = cursor.fetchall()
+        return [GlossaryTerm(**dict(row)) for row in rows]
+
+
+def get_glossary_by_id(term_id: int) -> Optional[GlossaryTerm]:
+    """Получить термин по ID."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM glossary WHERE id = ?", (term_id,))
+        row = cursor.fetchone()
+        return GlossaryTerm(**dict(row)) if row else None
+
+
+def create_glossary_term(term: str, definition: str, letter: str) -> bool:
+    """Создать новый термин глоссария."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO glossary (term, definition, letter) VALUES (?, ?, ?)",
+                (term, definition, letter)
+            )
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+def update_glossary_term(term_id: int, term: str, definition: str, letter: str) -> bool:
+    """Обновить термин глоссария."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE glossary SET term = ?, definition = ?, letter = ? WHERE id = ?",
+                (term, definition, letter, term_id)
+            )
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+def delete_glossary_term(term_id: int) -> bool:
+    """Удалить термин глоссария."""
+    try:
+        with get_db() as conn:
+            conn.execute("DELETE FROM glossary WHERE id = ?", (term_id,))
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
 # ====== ОТЗЫВЫ ======
 
 def create_feedback(name: str, message: str, email: str = "", rating: int = 0) -> str:
     """Создать отзыв."""
     feedback_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
-    
     with get_db() as conn:
         conn.execute(
             "INSERT INTO feedback (id, name, email, message, rating, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -318,27 +468,19 @@ def get_all_feedback() -> List[Feedback]:
 # ====== ПОЛЬЗОВАТЕЛИ ======
 
 def create_user(username: str, email: str, password: str) -> Tuple[bool, str]:
-    """
-    Создать нового пользователя.
-    Возвращает (успех, сообщение).
-    """
+    """Создать нового пользователя. Возвращает (успех, сообщение)."""
     if not validate_username(username):
         return False, "Недопустимое имя пользователя"
-    
     if not validate_email(email):
         return False, "Недопустимый email"
-    
     password_hash = hash_password(password)
     created_at = datetime.now().isoformat()
-    
     try:
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
                 (username, email, password_hash, created_at)
             )
-            
-            # Создаём запись XP
             cursor = conn.execute("SELECT last_insert_rowid()")
             user_id = cursor.fetchone()[0]
             conn.execute(
@@ -346,7 +488,7 @@ def create_user(username: str, email: str, password: str) -> Tuple[bool, str]:
                 (user_id,)
             )
             conn.commit()
-        return True, "Пользователь успешно создан"
+            return True, "Пользователь успешно создан"
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
             return False, "Пользователь с таким именем или email уже существует"
@@ -371,30 +513,45 @@ def get_user_by_id(user_id: int) -> Optional[User]:
 
 # ====== ДОСТИЖЕНИЯ И ГЕЙМИФИКАЦИЯ ======
 
+def seed_achievements():
+    """Заполнить таблицу достижений начальными данными."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM achievements")
+        if cursor.fetchone()[0] > 0:
+            return
+        achievements = [
+            ("Первые шаги", "Пройдите первый тест", "🎯", "quizzes_passed", 1),
+            ("Студент", "Достигните 3-го уровня", "⭐", "level", 3),
+            ("Знаток", "Пройдите 5 тестов", "📝", "quizzes_passed", 5),
+            ("Мастер", "Достигните 5-го уровня", "🏆", "level", 5),
+            ("Эксперт", "Пройдите 10 тестов", "🎓", "quizzes_passed", 10),
+            ("Виртуоз", "Достигните 10-го уровня", "💎", "level", 10),
+        ]
+        for name, desc, icon, req_type, req_val in achievements:
+            conn.execute(
+                "INSERT INTO achievements (name, description, icon, requirement_type, requirement_value) VALUES (?, ?, ?, ?, ?)",
+                (name, desc, icon, req_type, req_val)
+            )
+        conn.commit()
+
+
 def add_xp(user_id: int, amount: int) -> int:
     """Добавить опыт пользователю. Возвращает новый уровень."""
     with get_db() as conn:
-        # Получаем текущий XP и уровень
         cursor = conn.execute("SELECT xp, level FROM user_xp WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
-        
         if not row:
-            # Создаём запись XP если нет
             conn.execute("INSERT INTO user_xp (user_id, xp, level) VALUES (?, ?, 1)", (user_id, amount))
             conn.commit()
             return 1
-        
         current_xp, current_level = row
         new_xp = current_xp + amount
         new_level = current_level
-        
-        # Расчёт уровня: каждый уровень требует 100 * level XP
         xp_needed = 100 * current_level
         while new_xp >= xp_needed:
             new_xp -= xp_needed
             new_level += 1
             xp_needed = 100 * new_level
-        
         conn.execute(
             "UPDATE user_xp SET xp = ?, level = ? WHERE user_id = ?",
             (new_xp, new_level, user_id)
@@ -406,48 +563,38 @@ def add_xp(user_id: int, amount: int) -> int:
 def check_achievements(user_id: int) -> List[Achievement]:
     """Проверить и выдать достижения пользователю."""
     earned = []
-    
     with get_db() as conn:
-        # Получаем статистику пользователя
         cursor = conn.execute("SELECT level FROM user_xp WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
         user_level = row["level"] if row else 1
-        
+
         cursor = conn.execute("SELECT COUNT(*) FROM quiz_results WHERE user_id = ?", (user_id,))
         quizzes_passed = cursor.fetchone()[0]
-        
-        # Получаем все достижения
+
         cursor = conn.execute("SELECT * FROM achievements")
         achievements = [Achievement(**dict(row)) for row in cursor.fetchall()]
-        
-        # Получаем уже полученные достижения
+
         cursor = conn.execute(
             "SELECT achievement_id FROM user_achievements WHERE user_id = ?",
             (user_id,)
         )
         earned_ids = {row["achievement_id"] for row in cursor.fetchall()}
-        
-        # Проверяем каждое достижение
+
         for achievement in achievements:
             if achievement.id in earned_ids:
                 continue
-            
             should_earn = False
-            
             if achievement.requirement_type == "level":
                 should_earn = user_level >= achievement.requirement_value
             elif achievement.requirement_type == "quizzes_passed":
                 should_earn = quizzes_passed >= achievement.requirement_value
-            
             if should_earn:
                 conn.execute(
                     "INSERT INTO user_achievements (user_id, achievement_id, earned_at) VALUES (?, ?, ?)",
                     (user_id, achievement.id, datetime.now().isoformat())
                 )
                 earned.append(achievement)
-        
         conn.commit()
-    
     return earned
 
 
@@ -465,60 +612,48 @@ def get_user_achievements(user_id: int) -> List[UserAchievement]:
 def get_platform_stats() -> dict:
     """Получить общую статистику платформы."""
     with get_db() as conn:
-        # Количество категорий
         cursor = conn.execute("SELECT COUNT(*) FROM categories")
         categories = cursor.fetchone()[0]
-        
-        # Количество тем
         cursor = conn.execute("SELECT COUNT(*) FROM topics")
         topics = cursor.fetchone()[0]
-        
-        # Количество вопросов
         cursor = conn.execute("SELECT COUNT(*) FROM questions")
         questions = cursor.fetchone()[0]
-        
-        # Количество терминов в словаре
         cursor = conn.execute("SELECT COUNT(*) FROM glossary")
         glossary = cursor.fetchone()[0]
-        
-        return {
-            "categories": categories,
-            "topics": topics,
-            "questions": questions,
-            "glossary": glossary
-        }
+    return {
+        "categories": categories,
+        "topics": topics,
+        "questions": questions,
+        "glossary": glossary
+    }
 
 
 def get_user_stats(user_id: int) -> dict:
     """Получить статистику пользователя."""
     with get_db() as conn:
-        # XP и уровень
         cursor = conn.execute("SELECT xp, level FROM user_xp WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
         xp_data = {"xp": row["xp"], "level": row["level"]} if row else {"xp": 0, "level": 1}
-        
-        # Количество пройденных тестов
+
         cursor = conn.execute("SELECT COUNT(*) FROM quiz_results WHERE user_id = ?", (user_id,))
         quizzes_passed = cursor.fetchone()[0]
-        
-        # Средний результат
+
         cursor = conn.execute(
             "SELECT AVG(score * 100.0 / total) FROM quiz_results WHERE user_id = ?",
             (user_id,)
         )
         avg_score = cursor.fetchone()[0] or 0
-        
-        # Достижения
+
         cursor = conn.execute(
             "SELECT COUNT(*) FROM user_achievements WHERE user_id = ?",
             (user_id,)
         )
         achievements_count = cursor.fetchone()[0]
-        
-        return {
-            "xp": xp_data["xp"],
-            "level": xp_data["level"],
-            "quizzes_passed": quizzes_passed,
-            "avg_score": round(avg_score, 1),
-            "achievements_count": achievements_count
-        }
+
+    return {
+        "xp": xp_data["xp"],
+        "level": xp_data["level"],
+        "quizzes_passed": quizzes_passed,
+        "avg_score": round(avg_score, 1),
+        "achievements_count": achievements_count
+    }

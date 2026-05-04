@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 # Import database initialization
-from app.database.db import init_database, DB_NAME
+from app.database.db import init_database, seed_achievements, DB_NAME
 
 # Import routes
 from app.routes.main_routes import router as main_router
@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
     """Современный lifespan API для инициализации приложения."""
     # Startup: инициализация БД
     init_database()
+    seed_achievements()
 
     # Настройка шаблонов и статики
     static_path = os.path.join(os.path.dirname(__file__), "static")
